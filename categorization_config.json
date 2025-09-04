@@ -1,0 +1,232 @@
+{
+  "ml_model_config": {
+    "confidence_threshold": 0.8,
+    "manual_review_threshold": 0.8,
+    "large_transaction_threshold": 500.0,
+    "retraining_frequency": "weekly",
+    "feature_extraction": {
+      "merchant_name": true,
+      "transaction_amount": true,
+      "transaction_description": true,
+      "day_of_week": true,
+      "time_of_day": true,
+      "account_type": true
+    }
+  },
+
+  "merchant_patterns": {
+    "groceries": [
+      "WHOLE FOODS*",
+      "SAFEWAY*",
+      "TRADER JOE*",
+      "KROGER*",
+      "COSTCO*",
+      "TARGET* GROCERY",
+      "WALMART GROCERY*",
+      "RALPHS"
+    ],
+    "restaurants": [
+      "MCDONALD*",
+      "STARBUCKS*",
+      "CHIPOTLE*",
+      "PANERA*",
+      "OLIVE GARDEN*",
+      "UBER EATS*",
+      "DOORDASH*",
+      "GRUBHUB*"
+    ],
+    "gas_stations": ["SHELL*", "CHEVRON*", "BP*", "EXXON*", "MOBIL*", "ARCO*"],
+    "online_shopping": [
+      "AMAZON*",
+      "AMZN*",
+      "EBAY*",
+      "ETSY*",
+      "WAYFAIR*",
+      "OVERSTOCK*"
+    ],
+    "utilities": [
+      "PG&E*",
+      "COMCAST*",
+      "VERIZON*",
+      "AT&T*",
+      "WATER DEPT*",
+      "ELECTRIC*"
+    ]
+  },
+
+  "category_hierarchy": {
+    "Housing & Utilities": {
+      "subcategories": [
+        "Rent/Mortgage",
+        "Property Tax",
+        "Insurance",
+        "Electricity",
+        "Gas",
+        "Water",
+        "Internet/Cable",
+        "Phone",
+        "Maintenance"
+      ],
+      "budget_percentage": 35,
+      "alert_threshold": 1.2
+    },
+    "Transportation": {
+      "subcategories": [
+        "Car Payment",
+        "Auto Insurance",
+        "Gasoline",
+        "Maintenance",
+        "Parking",
+        "Public Transit",
+        "Rideshare"
+      ],
+      "budget_percentage": 15,
+      "alert_threshold": 1.3
+    },
+    "Food & Dining": {
+      "subcategories": [
+        "Groceries",
+        "Restaurants",
+        "Fast Food",
+        "Coffee",
+        "Work Meals"
+      ],
+      "budget_percentage": 12,
+      "alert_threshold": 1.5
+    },
+    "Healthcare": {
+      "subcategories": [
+        "Insurance",
+        "Doctor Visits",
+        "Prescriptions",
+        "Dental",
+        "Vision"
+      ],
+      "budget_percentage": 8,
+      "alert_threshold": 2.0
+    },
+    "Entertainment": {
+      "subcategories": ["Streaming", "Movies", "Concerts", "Hobbies", "Sports"],
+      "budget_percentage": 8,
+      "alert_threshold": 2.0
+    },
+    "Personal Care": {
+      "subcategories": ["Clothing", "Haircare", "Personal Items", "Gym"],
+      "budget_percentage": 5,
+      "alert_threshold": 2.0
+    },
+    "Financial": {
+      "subcategories": [
+        "Savings",
+        "Investments",
+        "Debt Payments",
+        "Bank Fees",
+        "Interest"
+      ],
+      "budget_percentage": 15,
+      "alert_threshold": 1.1
+    },
+    "Shopping": {
+      "subcategories": [
+        "General Merchandise",
+        "Online Shopping",
+        "Gifts",
+        "Pet Care"
+      ],
+      "budget_percentage": 5,
+      "alert_threshold": 2.0
+    }
+  },
+
+  "split_transaction_rules": {
+    "target_stores": {
+      "merchants": ["TARGET*", "WALMART*", "COSTCO*"],
+      "default_splits": {
+        "Groceries": 0.6,
+        "Household Items": 0.3,
+        "Personal Care": 0.1
+      }
+    },
+    "pharmacy_chains": {
+      "merchants": ["CVS*", "WALGREENS*", "RITE AID*"],
+      "default_splits": {
+        "Healthcare": 0.7,
+        "Personal Care": 0.3
+      }
+    },
+    "minimum_amount": 75.0,
+    "manual_review_required": true
+  },
+
+  "fraud_detection_rules": {
+    "amount_thresholds": {
+      "immediate_alert": 1000.0,
+      "review_required": 500.0,
+      "unusual_small": {
+        "amount": 1.0,
+        "frequency": 5,
+        "timeframe_hours": 24
+      }
+    },
+    "location_rules": {
+      "foreign_transactions": true,
+      "unusual_distance_km": 500,
+      "multiple_locations_same_day": 3
+    },
+    "merchant_rules": {
+      "new_merchant_review": true,
+      "blacklisted_categories": ["adult", "gambling", "cash_advance"]
+    },
+    "timing_rules": {
+      "unusual_hours": {
+        "start": "02:00",
+        "end": "05:00"
+      },
+      "weekend_large_purchases": 300.0
+    }
+  },
+
+  "reconciliation_settings": {
+    "balance_tolerance": 0.01,
+    "transaction_buffer_days": 3,
+    "pending_transaction_window_hours": 72,
+    "duplicate_detection": {
+      "amount_tolerance": 0.01,
+      "time_window_hours": 24,
+      "merchant_fuzzy_match": true
+    }
+  },
+
+  "reporting_config": {
+    "weekly_metrics": [
+      "total_spending",
+      "category_breakdown",
+      "budget_variance",
+      "savings_rate",
+      "account_balances"
+    ],
+    "monthly_reports": [
+      "spending_trends",
+      "category_analysis",
+      "goal_progress",
+      "cash_flow_summary"
+    ],
+    "tax_categories": {
+      "deductible_medical": ["Healthcare"],
+      "business_expenses": ["Home Office", "Professional Development"],
+      "charitable_donations": ["Charity"],
+      "investment_related": ["Financial"]
+    }
+  },
+
+  "automation_rules": {
+    "auto_categorize_confidence": 0.9,
+    "recurring_transaction_learning": true,
+    "transfer_auto_detection": true,
+    "budget_alert_thresholds": {
+      "warning": 0.8,
+      "critical": 1.0,
+      "emergency": 1.2
+    }
+  }
+}
