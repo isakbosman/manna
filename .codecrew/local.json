@@ -1,0 +1,9 @@
+{
+  "llm": {
+    "api_key_configured": false,
+    "connection_tested": false
+  },
+  "local_paths": {
+    "chroma_persist_dir": "/Users/isak/dev/manna/.codecrew/memory/chroma"
+  }
+}

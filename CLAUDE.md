@@ -5,6 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 This is a Financial and Accounting Hub that functions as an agentic accounting firm. The system handles:
+
 - Transaction downloads from personal and business accounts via Plaid API
 - Transaction reconciliation
 - Bookkeeping and financial planning
@@ -22,7 +23,9 @@ accounts/
 ## Key Components
 
 ### Reports (Owner Package)
+
 The reports directory contains standardized financial packages including:
+
 - P&L statements (YTD + prior month comparison)
 - Balance Sheet
 - Simple Cash Flow statements
@@ -35,6 +38,7 @@ The reports directory contains standardized financial packages including:
 - One-page narrative summaries with highlights, risks, and action items
 
 ### Tools
+
 Contains the Plaid API integration for pulling financial transactions from connected accounts.
 
 ## Development Notes

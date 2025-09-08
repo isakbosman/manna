@@ -7,6 +7,7 @@ Your financial management system is fully installed and tested. All tests passed
 ## 🚀 Getting Started
 
 ### 1. Configure Plaid API
+
 ```bash
 cp .env.sample .env
 # Edit .env and add your Plaid credentials:
@@ -16,11 +17,13 @@ cp .env.sample .env
 ```
 
 ### 2. Launch the System
+
 ```bash
 ./start.sh
 ```
 
 Choose from the menu:
+
 - **Option 1**: Dashboard (http://localhost:8502)
 - **Option 3**: Setup Plaid accounts (interactive)
 - **Option 5**: Run tests again
@@ -28,13 +31,15 @@ Choose from the menu:
 ### 3. Connect Your 11 Accounts
 
 Run the Plaid setup:
+
 ```bash
 ./start.sh → Option 3
 ```
 
 This will guide you through connecting:
+
 - 2 Business bank accounts
-- 1 Business credit card  
+- 1 Business credit card
 - 1 Personal bank account
 - 6-7 Personal credit cards
 - 1 Investment account
@@ -44,6 +49,7 @@ This will guide you through connecting:
 Access at: http://localhost:8502
 
 Key features:
+
 - **Overview**: Account balances, spending trends, key metrics
 - **Transactions**: ML categorization review (start training the model!)
 - **Reports**: P&L, Balance Sheet, Cash Flow, CPA packages
@@ -53,6 +59,7 @@ Key features:
 ## 📊 ML Model Training
 
 The system starts with ~75% accuracy and improves with your corrections:
+
 - Week 1-2: Review low-confidence transactions (< 80%)
 - Month 1: Accuracy improves to ~85%
 - Month 3: Reaches 95% accuracy
@@ -74,15 +81,18 @@ The system starts with ~75% accuracy and improves with your corrections:
 ## 🆘 Troubleshooting
 
 **Dashboard won't start:**
+
 - Port conflict? Try: `./start.sh` and check the port number
 - Missing packages? Run: `~/anaconda3/envs/manna/bin/pip install -r requirements.txt`
 
 **Plaid connection issues:**
+
 - Check API credentials in .env
 - Verify account is active in Plaid dashboard
 - Use Development environment for testing
 
 **ML categorization low accuracy:**
+
 - Review and correct more transactions
 - System learns from every correction
 - Patience - it gets very good after ~100 transactions

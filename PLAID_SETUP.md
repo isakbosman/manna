@@ -3,6 +3,7 @@
 ## 🎯 Overview
 
 The enhanced Plaid integration provides complete visibility into your connected accounts with:
+
 - **Clear account identification** - See institution name, account name, type, and masked account numbers
 - **Automatic categorization** - Smart detection of business vs personal accounts
 - **Balance tracking** - Real-time balance updates for all accounts
@@ -29,6 +30,7 @@ PLAID_ENV=Sandbox  # or Development/Production
 ```
 
 The wizard provides these options:
+
 1. **View Current Accounts** - See all connected accounts with full details
 2. **Connect New Account** - Add accounts through Plaid Link
 3. **Verify Account Mapping** - Ensure accounts are correctly categorized
@@ -62,22 +64,24 @@ Chase - Premium Business Checking
 
 The system tracks your progress toward connecting all required accounts:
 
-| Type | Required | Purpose |
-|------|----------|---------|
-| Business Checking | 2 | Operating and payroll accounts |
-| Business Credit | 1 | Business expenses |
-| Personal Checking | 1 | Personal expenses |
-| Personal Credit | 6-7 | Various personal cards |
-| Investment | 1 | Investment tracking |
+| Type              | Required | Purpose                        |
+| ----------------- | -------- | ------------------------------ |
+| Business Checking | 2        | Operating and payroll accounts |
+| Business Credit   | 1        | Business expenses              |
+| Personal Checking | 1        | Personal expenses              |
+| Personal Credit   | 6-7      | Various personal cards         |
+| Investment        | 1        | Investment tracking            |
 
 ## 🔄 Account Categorization
 
 The system automatically detects business accounts by looking for:
+
 - Keywords: "business", "corp", "company", "llc", "inc"
 - Account subtypes: "commercial", "merchant"
 - Institution patterns
 
 You can always manually override categorization through:
+
 1. The setup wizard (Option 3)
 2. The dashboard Accounts page
 3. Direct editing in `config/plaid_accounts.json`
@@ -124,10 +128,12 @@ This creates test accounts with sample data from major banks.
 ## 📁 Data Storage
 
 Account information is stored in:
+
 - `config/plaid_accounts.json` - Account details and tokens
 - `data/financial.db` - SQLite database for transactions
 
 Format:
+
 ```json
 {
   "accounts": {
@@ -136,7 +142,7 @@ Format:
       "account_name": "Business Checking",
       "type": "depository",
       "mask": "1234",
-      "current_balance": 45678.90,
+      "current_balance": 45678.9,
       "is_business": true
     }
   }
@@ -153,18 +159,22 @@ Format:
 ## 🛠️ Troubleshooting
 
 ### "Can't see account details"
+
 - Ensure you're using the enhanced setup: `scripts/plaid_setup_enhanced.py`
 - Check that `config/plaid_accounts.json` exists
 
 ### "Wrong categorization"
+
 - Use wizard Option 3 to verify mappings
 - Or edit directly in the dashboard Settings
 
 ### "Missing balances"
+
 - Refresh balances from dashboard
 - Check Plaid connection status
 
 ### "Sandbox not working"
+
 - Verify PLAID_ENV=Sandbox in .env
 - Ensure you have valid Plaid credentials
 
@@ -195,14 +205,14 @@ account = manager.get_account_by_id("acc_123")
 
 ## 🎉 Benefits Over Basic Integration
 
-| Old Integration | Enhanced Integration |
-|-----------------|---------------------|
-| No visibility into accounts | Full account details displayed |
-| Manual categorization | Auto-detection of business accounts |
-| No balance tracking | Real-time balance updates |
-| Confusing setup | Interactive wizard with clear options |
-| No grouping | Organized by institution and type |
-| Text-only interface | Rich CLI + web dashboard |
+| Old Integration             | Enhanced Integration                  |
+| --------------------------- | ------------------------------------- |
+| No visibility into accounts | Full account details displayed        |
+| Manual categorization       | Auto-detection of business accounts   |
+| No balance tracking         | Real-time balance updates             |
+| Confusing setup             | Interactive wizard with clear options |
+| No grouping                 | Organized by institution and type     |
+| Text-only interface         | Rich CLI + web dashboard              |
 
 ## Next Steps
 

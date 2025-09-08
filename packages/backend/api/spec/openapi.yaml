@@ -1,0 +1,2073 @@
+openapi: 3.0.3
+info:
+  title: Manna Financial Management Platform API
+  description: |
+    Comprehensive API for the Manna Financial Management Platform - an agentic accounting firm system.
+
+    ## Features
+    - Plaid API integration for bank account connectivity
+    - ML-powered transaction categorization
+    - Real-time financial reporting
+    - JWT-based authentication
+    - WebSocket support for real-time updates
+
+    ## Authentication
+    Most endpoints require JWT authentication via the `Authorization: Bearer <token>` header.
+
+    ## Rate Limiting
+    - Standard endpoints: 1000 requests/hour per user
+    - Plaid sync endpoints: 100 requests/hour per user
+    - ML categorization: 500 requests/hour per user
+
+    ## WebSocket Events
+    Connect to `/ws/updates` for real-time notifications of:
+    - New transactions
+    - Categorization updates
+    - Report generation status
+    - Account sync status
+
+  version: 1.3.0
+  contact:
+    name: Manna Financial API Support
+    email: api-support@manna.financial
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.manna.financial/v1
+    description: Production server
+  - url: https://staging-api.manna.financial/v1
+    description: Staging server
+  - url: http://localhost:8000/v1
+    description: Local development server
+
+security:
+  - BearerAuth: []
+
+tags:
+  - name: Authentication
+    description: User authentication and authorization
+  - name: Plaid Integration
+    description: Bank account connectivity via Plaid API
+  - name: Transactions
+    description: Transaction management and processing
+  - name: Financial Reports
+    description: Financial reporting and analytics
+  - name: ML Categorization
+    description: Machine learning powered transaction categorization
+  - name: Account Management
+    description: Connected account management
+  - name: WebSocket
+    description: Real-time updates via WebSocket
+
+paths:
+  # Authentication Endpoints
+  /auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register new user
+      description: Create a new user account
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: User already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: User login
+      description: Authenticate user and return JWT tokens
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /auth/refresh:
+    post:
+      tags:
+        - Authentication
+      summary: Refresh access token
+      description: Get new access token using refresh token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: User logout
+      description: Invalidate current JWT tokens
+      responses:
+        '200':
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/reset-password:
+    post:
+      tags:
+        - Authentication
+      summary: Reset password
+      description: Send password reset email
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequest'
+      responses:
+        '200':
+          description: Password reset email sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  # Plaid Integration Endpoints
+  /plaid/link-token:
+    post:
+      tags:
+        - Plaid Integration
+      summary: Create Plaid Link token
+      description: Generate a link token for Plaid Link initialization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LinkTokenRequest'
+      responses:
+        '200':
+          description: Link token created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LinkTokenResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /plaid/exchange-token:
+    post:
+      tags:
+        - Plaid Integration
+      summary: Exchange public token for access token
+      description: Exchange Plaid public token for access token and store account information
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExchangeTokenRequest'
+      responses:
+        '201':
+          description: Token exchanged and accounts connected successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExchangeTokenResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /plaid/accounts:
+    get:
+      tags:
+        - Plaid Integration
+      summary: Get connected accounts
+      description: Retrieve all connected Plaid accounts for the user
+      responses:
+        '200':
+          description: Accounts retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accounts:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PlaidAccount'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /plaid/sync:
+    post:
+      tags:
+        - Plaid Integration
+      summary: Sync transactions
+      description: Manually trigger transaction sync for all or specific accounts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncRequest'
+      responses:
+        '202':
+          description: Sync initiated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+
+  /plaid/webhooks:
+    post:
+      tags:
+        - Plaid Integration
+      summary: Plaid webhook endpoint
+      description: Handle incoming webhooks from Plaid
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlaidWebhook'
+      responses:
+        '200':
+          description: Webhook processed successfully
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  # Transaction Management Endpoints
+  /transactions:
+    get:
+      tags:
+        - Transactions
+      summary: Get transactions
+      description: Retrieve transactions with filtering, pagination, and sorting
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: account_id
+          in: query
+          schema:
+            type: string
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: start_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: end_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: min_amount
+          in: query
+          schema:
+            type: number
+        - name: max_amount
+          in: query
+          schema:
+            type: number
+        - name: is_business
+          in: query
+          schema:
+            type: boolean
+        - name: needs_review
+          in: query
+          schema:
+            type: boolean
+        - name: search
+          in: query
+          schema:
+            type: string
+            description: Search in merchant name or description
+        - name: sort_by
+          in: query
+          schema:
+            type: string
+            enum: [date, amount, merchant_name]
+            default: date
+        - name: sort_order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+      responses:
+        '200':
+          description: Transactions retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /transactions/{transaction_id}:
+    get:
+      tags:
+        - Transactions
+      summary: Get transaction by ID
+      description: Retrieve a specific transaction by its ID
+      parameters:
+        - name: transaction_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Transaction retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    put:
+      tags:
+        - Transactions
+      summary: Update transaction
+      description: Update transaction details including categorization
+      parameters:
+        - name: transaction_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionUpdateRequest'
+      responses:
+        '200':
+          description: Transaction updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /transactions/bulk-update:
+    post:
+      tags:
+        - Transactions
+      summary: Bulk update transactions
+      description: Update multiple transactions in a single request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkUpdateRequest'
+      responses:
+        '200':
+          description: Bulk update completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkUpdateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /transactions/export:
+    post:
+      tags:
+        - Transactions
+      summary: Export transactions
+      description: Export transactions to CSV, Excel, or QBO format
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportRequest'
+      responses:
+        '200':
+          description: Export file generated successfully
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+            text/csv:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # Financial Reports Endpoints
+  /reports/pnl:
+    get:
+      tags:
+        - Financial Reports
+      summary: Get Profit & Loss report
+      description: Generate P&L statement for specified period
+      parameters:
+        - name: start_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: end_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: is_business
+          in: query
+          schema:
+            type: boolean
+            default: true
+        - name: compare_to_previous
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: P&L report generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PnLReport'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /reports/balance-sheet:
+    get:
+      tags:
+        - Financial Reports
+      summary: Get Balance Sheet
+      description: Generate balance sheet as of specified date
+      parameters:
+        - name: as_of_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: is_business
+          in: query
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: Balance sheet generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BalanceSheet'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /reports/cash-flow:
+    get:
+      tags:
+        - Financial Reports
+      summary: Get Cash Flow statement
+      description: Generate cash flow statement for specified period
+      parameters:
+        - name: start_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: end_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: is_business
+          in: query
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: Cash flow statement generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CashFlowReport'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /reports/kpis:
+    get:
+      tags:
+        - Financial Reports
+      summary: Get Key Performance Indicators
+      description: Retrieve financial KPIs and metrics
+      parameters:
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [month, quarter, year]
+            default: month
+        - name: as_of_date
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: KPIs retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KPIReport'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /reports/generate:
+    post:
+      tags:
+        - Financial Reports
+      summary: Generate custom report
+      description: Generate a custom financial report with specified parameters
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportGenerationRequest'
+      responses:
+        '202':
+          description: Report generation initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportGenerationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ML Categorization Endpoints
+  /ml/categorize:
+    post:
+      tags:
+        - ML Categorization
+      summary: Categorize transactions
+      description: Use ML to categorize transactions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategorizationRequest'
+      responses:
+        '200':
+          description: Categorization completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategorizationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+
+  /ml/train:
+    post:
+      tags:
+        - ML Categorization
+      summary: Train categorization model
+      description: Retrain the ML categorization model with user feedback
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrainingRequest'
+      responses:
+        '202':
+          description: Training initiated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrainingResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /ml/suggestions:
+    get:
+      tags:
+        - ML Categorization
+      summary: Get categorization suggestions
+      description: Get ML suggestions for transactions needing review
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: confidence_threshold
+          in: query
+          schema:
+            type: number
+            minimum: 0
+            maximum: 1
+            default: 0.5
+      responses:
+        '200':
+          description: Suggestions retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuggestionsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /ml/feedback:
+    post:
+      tags:
+        - ML Categorization
+      summary: Provide categorization feedback
+      description: Provide feedback on ML categorization accuracy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedbackRequest'
+      responses:
+        '200':
+          description: Feedback recorded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # Account Management Endpoints
+  /accounts:
+    get:
+      tags:
+        - Account Management
+      summary: Get all accounts
+      description: Retrieve all connected financial accounts
+      responses:
+        '200':
+          description: Accounts retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accounts:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Account'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /accounts/connect:
+    post:
+      tags:
+        - Account Management
+      summary: Connect new account
+      description: Initiate connection of a new financial account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConnectAccountRequest'
+      responses:
+        '201':
+          description: Account connection initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectAccountResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /accounts/{account_id}:
+    delete:
+      tags:
+        - Account Management
+      summary: Disconnect account
+      description: Disconnect and remove a financial account
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Account disconnected successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /accounts/{account_id}/refresh:
+    put:
+      tags:
+        - Account Management
+      summary: Refresh account data
+      description: Force refresh of account information and recent transactions
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '202':
+          description: Account refresh initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshAccountResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+
+  # WebSocket endpoint (for documentation purposes)
+  /ws/updates:
+    get:
+      tags:
+        - WebSocket
+      summary: Real-time updates WebSocket
+      description: |
+        WebSocket endpoint for real-time updates. Connect to receive:
+        - New transaction notifications
+        - Categorization updates
+        - Report generation status
+        - Account sync status
+        - System alerts
+
+        **Connection:** `ws://localhost:8000/ws/updates?token=<jwt_token>`
+
+        **Message Format:**
+        ```json
+        {
+          "type": "transaction_added|categorization_complete|sync_status|report_ready|error",
+          "data": { ... },
+          "timestamp": "2024-01-01T12:00:00Z"
+        }
+        ```
+      responses:
+        '101':
+          description: WebSocket connection established
+        '401':
+          description: Unauthorized - Invalid or missing token
+        '400':
+          description: Bad Request - Invalid connection parameters
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    BadRequest:
+      description: Bad request - Invalid input parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Unauthorized:
+      description: Unauthorized - Invalid or missing authentication
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    RateLimitExceeded:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: 'Rate limit exceeded'
+            message: 'Too many requests. Please try again later.'
+            code: 'RATE_LIMIT_EXCEEDED'
+
+  schemas:
+    # Authentication Schemas
+    RegisterRequest:
+      type: object
+      required:
+        - email
+        - password
+        - first_name
+        - last_name
+      properties:
+        email:
+          type: string
+          format: email
+          example: 'user@example.com'
+        password:
+          type: string
+          minLength: 8
+          example: 'SecurePassword123!'
+        first_name:
+          type: string
+          minLength: 1
+          example: 'John'
+        last_name:
+          type: string
+          minLength: 1
+          example: 'Doe'
+        phone:
+          type: string
+          example: '+1-555-123-4567'
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: 'user@example.com'
+        password:
+          type: string
+          example: 'SecurePassword123!'
+
+    RefreshRequest:
+      type: object
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+          example: 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...'
+
+    PasswordResetRequest:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
+          example: 'user@example.com'
+
+    AuthResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          example: 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...'
+        refresh_token:
+          type: string
+          example: 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...'
+        token_type:
+          type: string
+          example: 'bearer'
+        expires_in:
+          type: integer
+          example: 3600
+        user:
+          $ref: '#/components/schemas/User'
+
+    TokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          example: 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...'
+        token_type:
+          type: string
+          example: 'bearer'
+        expires_in:
+          type: integer
+          example: 3600
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 'user_12345'
+        email:
+          type: string
+          format: email
+          example: 'user@example.com'
+        first_name:
+          type: string
+          example: 'John'
+        last_name:
+          type: string
+          example: 'Doe'
+        phone:
+          type: string
+          example: '+1-555-123-4567'
+        created_at:
+          type: string
+          format: date-time
+          example: '2024-01-01T12:00:00Z'
+        is_active:
+          type: boolean
+          example: true
+
+    # Plaid Integration Schemas
+    LinkTokenRequest:
+      type: object
+      required:
+        - user_id
+      properties:
+        user_id:
+          type: string
+          example: 'user_12345'
+        products:
+          type: array
+          items:
+            type: string
+            enum: [transactions, auth, identity, assets]
+          default: ['transactions']
+        country_codes:
+          type: array
+          items:
+            type: string
+          default: ['US']
+
+    LinkTokenResponse:
+      type: object
+      properties:
+        link_token:
+          type: string
+          example: 'link-sandbox-12345-abcdef'
+        expiration:
+          type: string
+          format: date-time
+          example: '2024-01-01T16:00:00Z'
+
+    ExchangeTokenRequest:
+      type: object
+      required:
+        - public_token
+      properties:
+        public_token:
+          type: string
+          example: 'public-sandbox-12345-abcdef'
+        account_ids:
+          type: array
+          items:
+            type: string
+          description: 'Optional list of specific account IDs to connect'
+
+    ExchangeTokenResponse:
+      type: object
+      properties:
+        accounts:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlaidAccount'
+        item_id:
+          type: string
+          example: 'item_12345'
+        sync_status:
+          type: string
+          enum: [pending, syncing, complete, error]
+          example: 'pending'
+
+    PlaidAccount:
+      type: object
+      properties:
+        account_id:
+          type: string
+          example: 'acc_12345'
+        plaid_account_id:
+          type: string
+          example: 'plaid_acc_67890'
+        name:
+          type: string
+          example: 'Chase Checking'
+        official_name:
+          type: string
+          example: 'Chase Premier Plus Checking'
+        type:
+          type: string
+          enum: [depository, credit, loan, investment, other]
+          example: 'depository'
+        subtype:
+          type: string
+          example: 'checking'
+        mask:
+          type: string
+          example: '0000'
+        institution_name:
+          type: string
+          example: 'Chase'
+        balance:
+          $ref: '#/components/schemas/AccountBalance'
+        is_business:
+          type: boolean
+          example: false
+        last_sync:
+          type: string
+          format: date-time
+          example: '2024-01-01T12:00:00Z'
+
+    AccountBalance:
+      type: object
+      properties:
+        available:
+          type: number
+          example: 1250.75
+        current:
+          type: number
+          example: 1300.50
+        limit:
+          type: number
+          nullable: true
+          example: null
+        iso_currency_code:
+          type: string
+          example: 'USD'
+
+    SyncRequest:
+      type: object
+      properties:
+        account_ids:
+          type: array
+          items:
+            type: string
+          description: 'Specific accounts to sync. If empty, syncs all accounts.'
+        force_full_sync:
+          type: boolean
+          default: false
+          description: 'Force full sync instead of incremental'
+
+    SyncResponse:
+      type: object
+      properties:
+        sync_id:
+          type: string
+          example: 'sync_12345'
+        status:
+          type: string
+          enum: [initiated, in_progress, completed, failed]
+          example: 'initiated'
+        accounts:
+          type: array
+          items:
+            type: string
+          description: 'Account IDs being synced'
+        estimated_completion:
+          type: string
+          format: date-time
+          example: '2024-01-01T12:05:00Z'
+
+    PlaidWebhook:
+      type: object
+      required:
+        - webhook_type
+        - webhook_code
+        - item_id
+      properties:
+        webhook_type:
+          type: string
+          example: 'TRANSACTIONS'
+        webhook_code:
+          type: string
+          example: 'SYNC_UPDATES_AVAILABLE'
+        item_id:
+          type: string
+          example: 'item_12345'
+        error:
+          type: object
+          nullable: true
+        new_transactions:
+          type: integer
+          example: 5
+        removed_transactions:
+          type: array
+          items:
+            type: string
+
+    # Transaction Schemas
+    Transaction:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 'txn_12345'
+        plaid_transaction_id:
+          type: string
+          example: 'plaid_txn_67890'
+        account_id:
+          type: string
+          example: 'acc_12345'
+        amount:
+          type: number
+          example: -25.50
+          description: 'Negative for expenses, positive for income'
+        date:
+          type: string
+          format: date
+          example: '2024-01-01'
+        authorized_date:
+          type: string
+          format: date
+          nullable: true
+          example: '2024-01-01'
+        name:
+          type: string
+          example: 'STARBUCKS #1234'
+        merchant_name:
+          type: string
+          nullable: true
+          example: 'Starbucks'
+        category:
+          type: string
+          nullable: true
+          example: 'Food and Drink'
+        subcategory:
+          type: string
+          nullable: true
+          example: 'Coffee Shop'
+        ml_category:
+          type: string
+          nullable: true
+          example: 'Business Meals'
+        ml_confidence:
+          type: number
+          nullable: true
+          example: 0.85
+        user_category:
+          type: string
+          nullable: true
+          example: 'Business Meals'
+        is_business:
+          type: boolean
+          example: true
+        is_tax_deductible:
+          type: boolean
+          example: true
+        pending:
+          type: boolean
+          example: false
+        location:
+          $ref: '#/components/schemas/TransactionLocation'
+        payment_method:
+          type: string
+          nullable: true
+          example: 'card'
+        notes:
+          type: string
+          nullable: true
+          example: 'Client meeting lunch'
+        tags:
+          type: array
+          items:
+            type: string
+          example: ['client', 'deductible']
+        created_at:
+          type: string
+          format: date-time
+          example: '2024-01-01T12:00:00Z'
+        updated_at:
+          type: string
+          format: date-time
+          example: '2024-01-01T12:00:00Z'
+
+    TransactionLocation:
+      type: object
+      properties:
+        address:
+          type: string
+          nullable: true
+          example: '123 Main St'
+        city:
+          type: string
+          nullable: true
+          example: 'San Francisco'
+        state:
+          type: string
+          nullable: true
+          example: 'CA'
+        zip:
+          type: string
+          nullable: true
+          example: '94102'
+        country:
+          type: string
+          nullable: true
+          example: 'US'
+        lat:
+          type: number
+          nullable: true
+          example: 37.7749
+        lon:
+          type: number
+          nullable: true
+          example: -122.4194
+
+    TransactionListResponse:
+      type: object
+      properties:
+        transactions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Transaction'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+        summary:
+          $ref: '#/components/schemas/TransactionSummary'
+
+    TransactionSummary:
+      type: object
+      properties:
+        total_transactions:
+          type: integer
+          example: 1250
+        total_amount:
+          type: number
+          example: -2450.75
+        income_total:
+          type: number
+          example: 5000.00
+        expense_total:
+          type: number
+          example: -7450.75
+        by_category:
+          type: object
+          additionalProperties:
+            type: number
+          example:
+            'Food and Drink': -450.25
+            'Transportation': -125.50
+            'Business Services': -1200.00
+
+    TransactionUpdateRequest:
+      type: object
+      properties:
+        category:
+          type: string
+          example: 'Business Meals'
+        subcategory:
+          type: string
+          example: 'Client Entertainment'
+        is_business:
+          type: boolean
+          example: true
+        is_tax_deductible:
+          type: boolean
+          example: true
+        notes:
+          type: string
+          example: 'Updated notes'
+        tags:
+          type: array
+          items:
+            type: string
+          example: ['client', 'deductible']
+
+    BulkUpdateRequest:
+      type: object
+      required:
+        - transaction_ids
+        - updates
+      properties:
+        transaction_ids:
+          type: array
+          items:
+            type: string
+          example: ['txn_123', 'txn_456', 'txn_789']
+        updates:
+          $ref: '#/components/schemas/TransactionUpdateRequest'
+
+    BulkUpdateResponse:
+      type: object
+      properties:
+        updated_count:
+          type: integer
+          example: 3
+        failed_count:
+          type: integer
+          example: 0
+        failed_transactions:
+          type: array
+          items:
+            type: object
+            properties:
+              transaction_id:
+                type: string
+              error:
+                type: string
+          example: []
+
+    ExportRequest:
+      type: object
+      required:
+        - format
+        - start_date
+        - end_date
+      properties:
+        format:
+          type: string
+          enum: [csv, excel, qbo]
+          example: 'csv'
+        start_date:
+          type: string
+          format: date
+          example: '2024-01-01'
+        end_date:
+          type: string
+          format: date
+          example: '2024-01-31'
+        account_ids:
+          type: array
+          items:
+            type: string
+        categories:
+          type: array
+          items:
+            type: string
+        is_business:
+          type: boolean
+
+    # Financial Reports Schemas
+    PnLReport:
+      type: object
+      properties:
+        period_start:
+          type: string
+          format: date
+          example: '2024-01-01'
+        period_end:
+          type: string
+          format: date
+          example: '2024-01-31'
+        income:
+          $ref: '#/components/schemas/IncomeStatement'
+        expenses:
+          $ref: '#/components/schemas/ExpenseStatement'
+        net_income:
+          type: number
+          example: 2750.25
+        comparison:
+          $ref: '#/components/schemas/PnLComparison'
+        charts:
+          $ref: '#/components/schemas/ReportCharts'
+
+    IncomeStatement:
+      type: object
+      properties:
+        total:
+          type: number
+          example: 8500.00
+        by_category:
+          type: object
+          additionalProperties:
+            type: number
+          example:
+            'Consulting Revenue': 7500.00
+            'Investment Income': 1000.00
+
+    ExpenseStatement:
+      type: object
+      properties:
+        total:
+          type: number
+          example: 5749.75
+        by_category:
+          type: object
+          additionalProperties:
+            type: number
+          example:
+            'Office Expenses': 450.25
+            'Travel': 1200.50
+            'Software Subscriptions': 299.00
+
+    PnLComparison:
+      type: object
+      properties:
+        previous_period:
+          type: object
+          properties:
+            income:
+              type: number
+              example: 7200.00
+            expenses:
+              type: number
+              example: 5100.25
+            net_income:
+              type: number
+              example: 2099.75
+        change_percent:
+          type: object
+          properties:
+            income:
+              type: number
+              example: 18.06
+            expenses:
+              type: number
+              example: 12.74
+            net_income:
+              type: number
+              example: 31.01
+
+    BalanceSheet:
+      type: object
+      properties:
+        as_of_date:
+          type: string
+          format: date
+          example: '2024-01-31'
+        assets:
+          $ref: '#/components/schemas/Assets'
+        liabilities:
+          $ref: '#/components/schemas/Liabilities'
+        equity:
+          $ref: '#/components/schemas/Equity'
+        total_assets:
+          type: number
+          example: 125000.00
+        total_liabilities:
+          type: number
+          example: 25000.00
+        total_equity:
+          type: number
+          example: 100000.00
+
+    Assets:
+      type: object
+      properties:
+        current_assets:
+          type: object
+          properties:
+            cash:
+              type: number
+              example: 45000.00
+            checking:
+              type: number
+              example: 15000.00
+            savings:
+              type: number
+              example: 30000.00
+            accounts_receivable:
+              type: number
+              example: 12500.00
+        fixed_assets:
+          type: object
+          properties:
+            equipment:
+              type: number
+              example: 25000.00
+            furniture:
+              type: number
+              example: 5000.00
+
+    Liabilities:
+      type: object
+      properties:
+        current_liabilities:
+          type: object
+          properties:
+            accounts_payable:
+              type: number
+              example: 5000.00
+            credit_cards:
+              type: number
+              example: 3500.00
+            accrued_expenses:
+              type: number
+              example: 2000.00
+        long_term_liabilities:
+          type: object
+          properties:
+            loans:
+              type: number
+              example: 14500.00
+
+    Equity:
+      type: object
+      properties:
+        owner_equity:
+          type: number
+          example: 85000.00
+        retained_earnings:
+          type: number
+          example: 15000.00
+
+    CashFlowReport:
+      type: object
+      properties:
+        period_start:
+          type: string
+          format: date
+          example: '2024-01-01'
+        period_end:
+          type: string
+          format: date
+          example: '2024-01-31'
+        operating_activities:
+          $ref: '#/components/schemas/CashFlowSection'
+        investing_activities:
+          $ref: '#/components/schemas/CashFlowSection'
+        financing_activities:
+          $ref: '#/components/schemas/CashFlowSection'
+        net_cash_flow:
+          type: number
+          example: 2750.25
+        beginning_cash:
+          type: number
+          example: 42249.75
+        ending_cash:
+          type: number
+          example: 45000.00
+
+    CashFlowSection:
+      type: object
+      properties:
+        total:
+          type: number
+          example: 2750.25
+        items:
+          type: object
+          additionalProperties:
+            type: number
+          example:
+            'Net Income': 2750.25
+            'Depreciation': 500.00
+            'Accounts Receivable Change': -1250.00
+
+    KPIReport:
+      type: object
+      properties:
+        period:
+          type: string
+          example: '2024-01'
+        effective_hourly_rate:
+          type: number
+          example: 125.50
+        utilization_percentage:
+          type: number
+          example: 85.5
+        accounts_receivable_aging:
+          $ref: '#/components/schemas/ARAgingReport'
+        project_margins:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectMargin'
+        cash_runway:
+          type: object
+          properties:
+            months:
+              type: number
+              example: 18.5
+            based_on_monthly_burn:
+              type: number
+              example: 2430.75
+        expense_ratios:
+          type: object
+          additionalProperties:
+            type: number
+          example:
+            'Office Expenses': 5.3
+            'Travel': 14.1
+            'Software': 3.5
+
+    ARAgingReport:
+      type: object
+      properties:
+        total_outstanding:
+          type: number
+          example: 12500.00
+        current:
+          type: number
+          example: 8500.00
+        days_30:
+          type: number
+          example: 3000.00
+        days_60:
+          type: number
+          example: 1000.00
+        days_90_plus:
+          type: number
+          example: 0.00
+
+    ProjectMargin:
+      type: object
+      properties:
+        project_name:
+          type: string
+          example: 'Acme Corp Implementation'
+        revenue:
+          type: number
+          example: 15000.00
+        costs:
+          type: number
+          example: 8500.00
+        margin_percent:
+          type: number
+          example: 43.33
+
+    ReportGenerationRequest:
+      type: object
+      required:
+        - report_type
+        - parameters
+      properties:
+        report_type:
+          type: string
+          enum: [pnl, balance_sheet, cash_flow, tax_summary, custom]
+          example: 'pnl'
+        parameters:
+          type: object
+          additionalProperties: true
+          example:
+            start_date: '2024-01-01'
+            end_date: '2024-01-31'
+            include_comparison: true
+        format:
+          type: string
+          enum: [json, pdf, excel]
+          default: 'json'
+        delivery_method:
+          type: string
+          enum: [api, email, webhook]
+          default: 'api'
+
+    ReportGenerationResponse:
+      type: object
+      properties:
+        report_id:
+          type: string
+          example: 'report_12345'
+        status:
+          type: string
+          enum: [queued, generating, completed, failed]
+          example: 'queued'
+        estimated_completion:
+          type: string
+          format: date-time
+          example: '2024-01-01T12:05:00Z'
+        download_url:
+          type: string
+          nullable: true
+          example: null
+
+    ReportCharts:
+      type: object
+      properties:
+        income_trend:
+          type: array
+          items:
+            type: object
+            properties:
+              period:
+                type: string
+              value:
+                type: number
+        expense_breakdown:
+          type: array
+          items:
+            type: object
+            properties:
+              category:
+                type: string
+              value:
+                type: number
+              percentage:
+                type: number
+
+    # ML Categorization Schemas
+    CategorizationRequest:
+      type: object
+      required:
+        - transaction_ids
+      properties:
+        transaction_ids:
+          type: array
+          items:
+            type: string
+          example: ['txn_123', 'txn_456']
+        force_recategorize:
+          type: boolean
+          default: false
+
+    CategorizationResponse:
+      type: object
+      properties:
+        categorized_count:
+          type: integer
+          example: 2
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              transaction_id:
+                type: string
+                example: 'txn_123'
+              predicted_category:
+                type: string
+                example: 'Business Meals'
+              confidence:
+                type: number
+                example: 0.87
+              applied:
+                type: boolean
+                example: true
+
+    TrainingRequest:
+      type: object
+      properties:
+        include_recent_feedback:
+          type: boolean
+          default: true
+        training_data_cutoff:
+          type: string
+          format: date
+          nullable: true
+
+    TrainingResponse:
+      type: object
+      properties:
+        training_id:
+          type: string
+          example: 'training_12345'
+        status:
+          type: string
+          enum: [queued, training, completed, failed]
+          example: 'queued'
+        estimated_completion:
+          type: string
+          format: date-time
+          example: '2024-01-01T12:30:00Z'
+
+    SuggestionsResponse:
+      type: object
+      properties:
+        suggestions:
+          type: array
+          items:
+            type: object
+            properties:
+              transaction:
+                $ref: '#/components/schemas/Transaction'
+              suggested_category:
+                type: string
+                example: 'Office Supplies'
+              confidence:
+                type: number
+                example: 0.75
+              reasoning:
+                type: string
+                example: 'Similar transactions from this merchant are usually categorized as Office Supplies'
+
+    FeedbackRequest:
+      type: object
+      required:
+        - transaction_id
+        - correct_category
+        - predicted_category
+        - was_correct
+      properties:
+        transaction_id:
+          type: string
+          example: 'txn_123'
+        predicted_category:
+          type: string
+          example: 'Office Supplies'
+        correct_category:
+          type: string
+          example: 'Business Meals'
+        was_correct:
+          type: boolean
+          example: false
+        feedback_notes:
+          type: string
+          example: 'This was actually a lunch meeting, not office supplies'
+
+    # Account Management Schemas
+    Account:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 'acc_12345'
+        plaid_account_id:
+          type: string
+          example: 'plaid_acc_67890'
+        name:
+          type: string
+          example: 'Chase Business Checking'
+        official_name:
+          type: string
+          example: 'Chase Premier Plus Business Checking'
+        type:
+          type: string
+          enum: [depository, credit, loan, investment, other]
+          example: 'depository'
+        subtype:
+          type: string
+          example: 'checking'
+        mask:
+          type: string
+          example: '0000'
+        institution_name:
+          type: string
+          example: 'Chase'
+        institution_id:
+          type: string
+          example: 'ins_3'
+        balance:
+          $ref: '#/components/schemas/AccountBalance'
+        is_business:
+          type: boolean
+          example: true
+        is_active:
+          type: boolean
+          example: true
+        last_sync:
+          type: string
+          format: date-time
+          example: '2024-01-01T12:00:00Z'
+        sync_status:
+          type: string
+          enum: [healthy, error, requires_update]
+          example: 'healthy'
+        created_at:
+          type: string
+          format: date-time
+          example: '2024-01-01T12:00:00Z'
+
+    ConnectAccountRequest:
+      type: object
+      required:
+        - institution_id
+      properties:
+        institution_id:
+          type: string
+          example: 'ins_3'
+        public_token:
+          type: string
+          example: 'public-sandbox-12345-abcdef'
+
+    ConnectAccountResponse:
+      type: object
+      properties:
+        connection_id:
+          type: string
+          example: 'conn_12345'
+        status:
+          type: string
+          enum: [initiated, connecting, connected, failed]
+          example: 'initiated'
+        accounts:
+          type: array
+          items:
+            $ref: '#/components/schemas/Account'
+
+    RefreshAccountResponse:
+      type: object
+      properties:
+        refresh_id:
+          type: string
+          example: 'refresh_12345'
+        status:
+          type: string
+          enum: [initiated, refreshing, completed, failed]
+          example: 'initiated'
+        estimated_completion:
+          type: string
+          format: date-time
+          example: '2024-01-01T12:02:00Z'
+
+    # Common Schemas
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          example: 1
+        per_page:
+          type: integer
+          example: 50
+        total_items:
+          type: integer
+          example: 1250
+        total_pages:
+          type: integer
+          example: 25
+        has_next:
+          type: boolean
+          example: true
+        has_prev:
+          type: boolean
+          example: false
+
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: 'Operation completed successfully'
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: 'Validation Error'
+        message:
+          type: string
+          example: 'The provided data is invalid'
+        code:
+          type: string
+          example: 'VALIDATION_ERROR'
+        details:
+          type: object
+          additionalProperties: true
+          example:
+            field_errors:
+              email: ['Invalid email format']
+        timestamp:
+          type: string
+          format: date-time
+          example: '2024-01-01T12:00:00Z'
+        request_id:
+          type: string
+          example: 'req_12345'

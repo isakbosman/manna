@@ -1,0 +1,9 @@
+{
+  "packages/**/*.{ts,tsx,js,jsx}": [
+    "eslint --fix --max-warnings 0",
+    "prettier --write"
+  ],
+  "packages/**/*.{json,md,yml,yaml}": [
+    "prettier --write"
+  ]
+}

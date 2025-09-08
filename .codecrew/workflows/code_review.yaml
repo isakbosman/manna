@@ -1,0 +1,48 @@
+name: code_review_workflow
+description: Comprehensive code review with testing and analysis
+version: '1.0'
+
+nodes:
+  - id: analyze_code
+    agent: code_retrieval_agent
+    config:
+      search_depth: 3
+      include_dependencies: true
+
+  - id: review_code
+    agent: code_review_agent
+    config:
+      strictness: high
+      check_security: true
+      check_performance: true
+
+  - id: generate_tests
+    agent: test_agent
+    config:
+      coverage_target: 85
+      include_integration_tests: true
+
+  - id: fix_issues
+    agent: coding_agent
+    config:
+      auto_fix: true
+      preserve_comments: true
+
+edges:
+  - from: analyze_code
+    to: review_code
+
+  - from: review_code
+    to: generate_tests
+
+  - from: review_code
+    to: fix_issues
+    condition: "lambda x: x.get('issues_found', 0) > 0"
+
+parallel_groups:
+  - [generate_tests, fix_issues]
+
+metadata:
+  author: CodeCrew.AI
+  category: code_quality
+  estimated_duration: '5-10 minutes'

@@ -1,0 +1,158 @@
+# Enhanced Ollama Configuration for CodeCrew.AI
+# Production-ready settings for single GPU deployment
+
+# Ollama service configuration
+ollama:
+  default_endpoint: http://192.168.5.222:11434
+  embeddings_model: bge-m3
+
+  # GPU allocation and endpoints
+  gpu_allocation:
+    devices:
+      - id: 0
+        endpoint: http://192.168.5.222:11434
+        memory_gb: 24
+        max_concurrent_requests: 4
+        priority: 1
+        preferred_models:
+          - gpt-oss:20b
+
+  # Model configurations
+  models:
+    gpt-oss:20b:
+      context_window: 32768
+      temperature: 0.5
+      top_p: 0.9
+      top_k: 40
+      repeat_penalty: 1.1
+      num_predict: 4096
+      best_for:
+        - planning
+        - analysis
+        - architecture
+        - code_generation
+        - debugging
+        - refactoring
+        - code_review
+        - general_coding
+        - conversation
+      tool_calling_capable: true
+      streaming: true
+      gpu_preference: [0]
+
+# Agent-to-model assignments
+agent_assignments:
+  project_manager:
+    model: gpt-oss:20b
+    temperature: 0.5
+    context_window: 32768
+
+  task_agent:
+    model: gpt-oss:20b
+    temperature: 0.6
+    context_window: 32768
+
+  coding_agent:
+    model: gpt-oss:20b
+    temperature: 0.3
+    context_window: 32768
+
+  code_review:
+    model: gpt-oss:20b
+    temperature: 0.4
+    context_window: 32768
+
+  test_agent:
+    model: gpt-oss:20b
+    temperature: 0.3
+    context_window: 32768
+
+  knowledge_agent:
+    model: gpt-oss:20b
+    temperature: 0.5
+    context_window: 32768
+
+  integration_agent:
+    model: gpt-oss:20b
+    temperature: 0.5
+    context_window: 32768
+
+  code_retrieval:
+    model: gpt-oss:20b
+    temperature: 0.3
+    context_window: 32768
+
+# Load balancing configuration
+load_balancing:
+  algorithm: least_connections # Options: round_robin, least_connections, weighted_round_robin
+  health_weight: 0.7
+  performance_weight: 0.3
+  circuit_breaker_threshold: 5
+  circuit_breaker_timeout: 60.0
+
+# Performance settings
+performance:
+  response_cache_enabled: true
+  cache_ttl: 3600 # 1 hour
+  max_connections_per_endpoint: 20
+  connection_timeout: 30
+  read_timeout: 300
+
+# Health check configuration
+health_checks:
+  enabled: true
+  interval: 30 # seconds
+  timeout: 10
+  retries: 3
+
+# Tool calling configuration
+tool_calling:
+  format: json # Options: json, xml, yaml
+  enable_validation: true
+  max_retries: 3
+  timeout: 60
+
+# Monitoring and observability
+monitoring:
+  metrics_enabled: true
+  metrics_port: 9090
+  logging_level: INFO
+  log_requests: false
+  log_responses: false
+  track_token_usage: true
+
+# Security settings
+security:
+  api_key_required: false
+  allowed_origins:
+    - http://localhost:3000
+    - http://localhost:8000
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 60
+    requests_per_hour: 1000
+
+# Fallback and resilience
+resilience:
+  enable_fallback_models: false
+  fallback_order:
+    - gpt-oss:20b
+  retry_on_failure: true
+  max_retries: 3
+  retry_delay: 1.0
+  exponential_backoff: true
+
+# Advanced features
+features:
+  context_window_optimization: true
+  adaptive_temperature: true
+  response_compression: true
+  batch_processing: false
+  priority_queuing: true
+
+# Development settings (override in production)
+development:
+  verbose_logging: false
+  mock_responses: false
+  disable_cache: false
+  force_single_gpu: false

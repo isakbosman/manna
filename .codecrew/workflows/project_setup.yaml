@@ -1,0 +1,37 @@
+name: project_setup_workflow
+description: Initialize a new project with best practices
+version: '1.0'
+
+nodes:
+  - id: analyze_requirements
+    agent: project_manager_agent
+    config:
+      create_structure: true
+      setup_git: true
+
+  - id: setup_testing
+    agent: test_agent
+    config:
+      framework: pytest
+      setup_coverage: true
+
+  - id: create_documentation
+    agent: knowledge_agent
+    config:
+      include_readme: true
+      include_contributing: true
+
+edges:
+  - from: analyze_requirements
+    to: setup_testing
+
+  - from: analyze_requirements
+    to: create_documentation
+
+parallel_groups:
+  - [setup_testing, create_documentation]
+
+metadata:
+  author: CodeCrew.AI
+  category: project_initialization
+  estimated_duration: '3-5 minutes'
