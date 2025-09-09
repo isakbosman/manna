@@ -1,0 +1,1 @@
+{\n  \"semi\": false,\n  \"trailingComma\": \"es5\",\n  \"singleQuote\": true,\n  \"tabWidth\": 2,\n  \"useTabs\": false,\n  \"printWidth\": 80,\n  \"endOfLine\": \"lf\",\n  \"arrowParens\": \"always\",\n  \"bracketSpacing\": true,\n  \"jsxSingleQuote\": false,\n  \"quoteProps\": \"as-needed\",\n  \"plugins\": [\"prettier-plugin-tailwindcss\"]\n}"

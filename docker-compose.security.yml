@@ -1,0 +1,49 @@
+# Security-hardened Docker Compose override
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.security.yml up
+
+version: '3.8'
+
+services:
+  postgres:
+    environment:
+      # Remove insecure trust method
+      POSTGRES_HOST_AUTH_METHOD: md5
+    # Add security options
+    security_opt:
+      - no-new-privileges:true
+    read_only: false  # Postgres needs write access to /var/lib/postgresql/data
+    tmpfs:
+      - /tmp
+      - /var/run/postgresql
+
+  redis:
+    # Security hardening for Redis
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  backend:
+    # Security improvements
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      # Bind to specific interface in production
+      - UVICORN_HOST=0.0.0.0  # Can be changed to specific IP in production
+      - UVICORN_PORT=8000
+    # Add user context
+    user: "1000:1000"
+
+  frontend:
+    security_opt:
+      - no-new-privileges:true
+    user: "1001:1001"
+
+# Add secrets management (example)
+secrets:
+  postgres_password:
+    file: ./secrets/postgres_password.txt
+  jwt_secret:
+    file: ./secrets/jwt_secret.txt
+

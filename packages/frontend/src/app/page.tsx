@@ -1,13 +1,7 @@
-import { formatCurrency } from '@manna/shared';
+import { redirect } from 'next/navigation'
 
+// Redirect root path to dashboard for authenticated users
+// or to auth/login for non-authenticated users
 export default function HomePage() {
-  const sampleAmount = 12345.67;
-
-  return (
-    <main>
-      <h1>Manna Financial Platform</h1>
-      <p>Welcome to your Financial and Accounting Hub</p>
-      <p>Sample formatted currency: {formatCurrency(sampleAmount)}</p>
-    </main>
-  );
+  redirect('/dashboard')
 }

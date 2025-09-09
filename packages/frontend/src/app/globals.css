@@ -1,0 +1,158 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Import Inter font */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@100;200;300;400;500;600;700;800&display=swap');
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222.2 84% 4.9%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222.2 84% 4.9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 84% 4.9%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 94.1%;
+  }
+}
+
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+}
+
+/* Custom utility classes for financial applications */
+@layer components {
+  .currency-positive {
+    @apply text-success-600 font-medium;
+  }
+  
+  .currency-negative {
+    @apply text-error-600 font-medium;
+  }
+  
+  .currency-neutral {
+    @apply text-neutral-600 font-medium;
+  }
+  
+  .card-financial {
+    @apply bg-white rounded-lg shadow-card border border-neutral-200 p-6;
+  }
+  
+  .table-financial {
+    @apply w-full divide-y divide-neutral-200;
+  }
+  
+  .table-financial thead {
+    @apply bg-neutral-50;
+  }
+  
+  .table-financial th {
+    @apply px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider;
+  }
+  
+  .table-financial td {
+    @apply px-6 py-4 whitespace-nowrap text-sm text-neutral-900;
+  }
+  
+  .btn-primary {
+    @apply bg-primary-600 hover:bg-primary-700 text-white font-medium py-2 px-4 rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2;
+  }
+  
+  .btn-secondary {
+    @apply bg-secondary-100 hover:bg-secondary-200 text-secondary-800 font-medium py-2 px-4 rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-secondary-500 focus:ring-offset-2;
+  }
+  
+  .input-financial {
+    @apply block w-full rounded-md border-neutral-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm;
+  }
+  
+  .form-group {
+    @apply space-y-2;
+  }
+  
+  .form-label {
+    @apply block text-sm font-medium text-neutral-700;
+  }
+  
+  .form-error {
+    @apply text-sm text-error-600 mt-1;
+  }
+  
+  .loading-spinner {
+    @apply animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600;
+  }
+  
+  .stat-card {
+    @apply bg-white rounded-lg shadow-sm border border-neutral-200 p-4;
+  }
+  
+  .stat-value {
+    @apply text-2xl font-bold text-neutral-900;
+  }
+  
+  .stat-label {
+    @apply text-sm text-neutral-500 mt-1;
+  }
+  
+  .dashboard-grid {
+    @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6;
+  }
+  
+  .sidebar-nav {
+    @apply space-y-1;
+  }
+  
+  .sidebar-nav a {
+    @apply flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-200;
+  }
+  
+  .sidebar-nav a.active {
+    @apply bg-primary-100 text-primary-700;
+  }
+  
+  .sidebar-nav a:not(.active) {
+    @apply text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900;
+  }
+}

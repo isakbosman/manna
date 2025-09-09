@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: manna-frontend
+  namespace: manna
+  labels:
+    app: manna-frontend
+    version: v1
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 2
+  selector:
+    matchLabels:
+      app: manna-frontend
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: manna-frontend
+        version: v1
+    spec:
+      containers:
+      - name: frontend
+        image: manna-frontend:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3000
+          name: http
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: NEXT_PUBLIC_API_URL
+          valueFrom:
+            configMapKeyRef:
+              name: manna-config
+              key: api-url
+        - name: NEXT_PUBLIC_APP_URL
+          valueFrom:
+            configMapKeyRef:
+              name: manna-config
+              key: app-url
+        - name: SENTRY_DSN
+          valueFrom:
+            secretKeyRef:
+              name: manna-secrets
+              key: sentry-dsn
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1001
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+      securityContext:
+        fsGroup: 1001

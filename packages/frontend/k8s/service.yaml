@@ -1,0 +1,53 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: manna-frontend-service
+  namespace: manna
+  labels:
+    app: manna-frontend
+spec:
+  selector:
+    app: manna-frontend
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+    name: http
+  type: ClusterIP
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: manna-config
+  namespace: manna
+data:
+  api-url: "https://api.manna.com"
+  app-url: "https://app.manna.com"
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: manna-frontend-ingress
+  namespace: manna
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/add-base-url: "true"
+spec:
+  tls:
+  - hosts:
+    - app.manna.com
+    secretName: manna-frontend-tls
+  rules:
+  - host: app.manna.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: manna-frontend-service
+            port:
+              number: 80

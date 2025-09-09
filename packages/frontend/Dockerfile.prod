@@ -1,0 +1,65 @@
+# Multi-stage production Dockerfile for Next.js
+FROM node:18-alpine AS base
+
+# Install dependencies only when needed
+FROM base AS deps
+RUN apk add --no-cache libc6-compat
+WORKDIR /app
+
+# Install pnpm
+RUN npm install -g pnpm
+
+# Copy package files
+COPY package.json pnpm-lock.yaml* ./
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/frontend/package.json ./packages/frontend/
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile --prod
+
+# Rebuild the source code only when needed
+FROM base AS builder
+WORKDIR /app
+
+# Install pnpm
+RUN npm install -g pnpm
+
+# Copy package files and install all dependencies (including dev)
+COPY package.json pnpm-lock.yaml* ./
+COPY packages/shared ./packages/shared
+COPY packages/frontend ./packages/frontend
+
+RUN pnpm install --frozen-lockfile
+
+# Build shared package first
+WORKDIR /app/packages/shared
+RUN pnpm build
+
+# Build frontend
+WORKDIR /app/packages/frontend
+RUN pnpm build
+
+# Production image, copy all the files and run next
+FROM base AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Create non-root user
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+# Copy the built application
+COPY --from=builder /app/packages/frontend/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/packages/frontend/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/packages/frontend/.next/static ./.next/static
+
+USER nextjs
+
+EXPOSE 3000
+
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+CMD ["node", "server.js"]

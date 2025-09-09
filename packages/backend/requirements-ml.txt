@@ -1,0 +1,15 @@
+# Machine Learning Dependencies for Manna Financial Platform
+
+# Core ML Libraries
+scikit-learn>=1.3.0
+numpy>=1.24.0
+pandas>=2.0.0
+joblib>=1.3.0
+
+# Excel Export Support
+openpyxl>=3.1.0
+
+# Optional: Advanced ML Libraries (for future enhancements)
+# tensorflow>=2.13.0
+# xgboost>=1.7.0
+# lightgbm>=4.0.0

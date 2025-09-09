@@ -15,36 +15,39 @@ def test_root_endpoint() -> None:
     response = client.get("/")
     assert response.status_code == 200
     data = response.json()
-    assert data["name"] == "Manna Financial Platform API"
+    assert data["name"] == "Manna Financial Platform"
     assert data["version"] == "1.0.0"
-    assert data["status"] == "running"
+    assert data["environment"] == "development"
 
 
 def test_health_check() -> None:
     """Test the health check endpoint."""
-    response = client.get("/api/health")
+    response = client.get("/health")
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "healthy"
     assert "timestamp" in data
     assert "environment" in data
+    assert "version" in data
 
 
-def test_accounts_endpoint() -> None:
-    """Test the accounts endpoint returns empty list initially."""
-    response = client.get("/api/accounts")
+def test_accounts_endpoint_unauthorized() -> None:
+    """Test the accounts endpoint requires authentication."""
+    response = client.get("/api/v1/accounts/")
+    assert response.status_code == 401
+
+
+def test_transactions_endpoint_unauthorized() -> None:
+    """Test the transactions endpoint requires authentication."""
+    response = client.get("/api/v1/transactions/")
+    assert response.status_code == 401
+
+
+def test_api_health_check() -> None:
+    """Test the API health check endpoint."""
+    response = client.get("/api/v1/health")
     assert response.status_code == 200
     data = response.json()
-    assert data["accounts"] == []
-    assert data["total"] == 0
-
-
-def test_transactions_endpoint() -> None:
-    """Test the transactions endpoint returns empty list initially."""
-    response = client.get("/api/transactions")
-    assert response.status_code == 200
-    data = response.json()
-    assert data["transactions"] == []
-    assert data["total"] == 0
-    assert data["page"] == 1
-    assert data["per_page"] == 50
+    assert data["status"] == "healthy"
+    assert "timestamp" in data
+    assert "environment" in data
