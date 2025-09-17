@@ -1,1 +1,52 @@
-import * as React from 'react'\nimport { cn } from '@/lib/utils'\n\nexport interface InputProps\n  extends React.InputHTMLAttributes<HTMLInputElement> {\n  error?: boolean\n  helperText?: string\n  startIcon?: React.ReactNode\n  endIcon?: React.ReactNode\n}\n\nconst Input = React.forwardRef<HTMLInputElement, InputProps>(\n  ({ className, type, error, helperText, startIcon, endIcon, ...props }, ref) => {\n    return (\n      <div className=\"relative\">\n        {startIcon && (\n          <div className=\"absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400\">\n            {startIcon}\n          </div>\n        )}\n        <input\n          type={type}\n          className={cn(\n            'flex h-10 w-full rounded-md border border-neutral-300 bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-neutral-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50',\n            startIcon && 'pl-10',\n            endIcon && 'pr-10',\n            error && 'border-error-500 focus-visible:ring-error-500',\n            className\n          )}\n          ref={ref}\n          {...props}\n        />\n        {endIcon && (\n          <div className=\"absolute right-3 top-1/2 transform -translate-y-1/2 text-neutral-400\">\n            {endIcon}\n          </div>\n        )}\n        {helperText && (\n          <p className={cn(\n            'mt-1 text-sm',\n            error ? 'text-error-600' : 'text-neutral-500'\n          )}>\n            {helperText}\n          </p>\n        )}\n      </div>\n    )\n  }\n)\nInput.displayName = 'Input'\n\nexport { Input }"
+import * as React from 'react'
+import { cn } from '../../lib/utils'
+
+export interface InputProps
+  extends React.InputHTMLAttributes<HTMLInputElement> {
+  error?: boolean
+  helperText?: string
+  startIcon?: React.ReactNode
+  endIcon?: React.ReactNode
+}
+
+const Input = React.forwardRef<HTMLInputElement, InputProps>(
+  ({ className, type, error, helperText, startIcon, endIcon, ...props }, ref) => {
+    return (
+      <div className="relative">
+        {startIcon && (
+          <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400">
+            {startIcon}
+          </div>
+        )}
+        <input
+          type={type}
+          className={cn(
+            'flex h-10 w-full rounded-md border border-neutral-300 bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-neutral-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50',
+            startIcon && 'pl-10',
+            endIcon && 'pr-10',
+            error && 'border-error-500 focus-visible:ring-error-500',
+            className
+          )}
+          ref={ref}
+          {...props}
+        />
+        {endIcon && (
+          <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-neutral-400">
+            {endIcon}
+          </div>
+        )}
+        {helperText && (
+          <p className={cn(
+            'mt-1 text-sm',
+            error ? 'text-error-600' : 'text-neutral-500'
+          )}>
+            {helperText}
+          </p>
+        )}
+      </div>
+    )
+  }
+)
+Input.displayName = 'Input'
+
+export { Input }

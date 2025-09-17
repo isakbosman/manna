@@ -9,8 +9,8 @@ import {
   Tooltip, 
   Legend 
 } from 'recharts'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { formatCurrency } from '@/lib/utils'
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
+import { formatCurrency } from '../../lib/utils'
 
 interface CategoryData {
   name: string

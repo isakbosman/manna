@@ -1,10 +1,10 @@
 'use client'
 
 import React from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Account } from '@/lib/api/accounts'
-import { formatCurrency } from '@/lib/utils'
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
+import { Button } from '../ui/button'
+import { Account } from '../../lib/api/accounts'
+import { formatCurrency } from '../../lib/utils'
 import { 
   CheckCircle, 
   AlertCircle, 

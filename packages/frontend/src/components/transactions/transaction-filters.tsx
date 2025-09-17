@@ -7,12 +7,12 @@ import {
   SearchIcon,
   BanknotesIcon
 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { CustomSelect } from '@/components/ui/select'
-import { Badge } from '@/components/ui/badge'
+import { Button } from '../ui/button'
+import { Input } from '../ui/input'
+import { CustomSelect } from '../ui/select'
+import { Badge } from '../ui/badge'
 import { TransactionFilters as ITransactionFilters, Account, Category } from '@/lib/api'
-import { cn } from '@/lib/utils'
+import { cn } from '../../lib/utils'
 import { format } from 'date-fns'
 
 interface TransactionFiltersProps {

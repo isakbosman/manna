@@ -18,7 +18,7 @@ from ..schemas.plaid import (
 )
 from ..schemas.account import Account as AccountSchema, AccountList
 from ..schemas.transaction import Transaction as TransactionSchema, TransactionList
-from ..dependencies.auth import get_current_verified_user
+from ..dependencies.auth import get_current_active_user
 from ..services.plaid_service import plaid_service
 from ..utils.redis import get_redis_client
 from ..config import settings
@@ -30,7 +30,7 @@ router = APIRouter()
 
 @router.post("/create-link-token", response_model=PlaidLinkToken)
 async def create_link_token(
-    current_user: User = Depends(get_current_verified_user),
+    current_user: User = Depends(get_current_active_user),
     access_token: Optional[str] = None
 ) -> PlaidLinkToken:
     """
@@ -41,9 +41,15 @@ async def create_link_token(
     - Token expires after 30 minutes
     """
     try:
+        # Get user name, handling None values
+        user_name = current_user.full_name if hasattr(current_user, 'full_name') and current_user.full_name else \
+                   current_user.username if hasattr(current_user, 'username') and current_user.username else \
+                   current_user.email if hasattr(current_user, 'email') and current_user.email else \
+                   "User"
+
         result = await plaid_service.create_link_token(
             user_id=str(current_user.id),
-            user_name=current_user.full_name or current_user.username,
+            user_name=user_name,
             access_token=access_token
         )
         
@@ -65,7 +71,7 @@ async def create_link_token(
 async def exchange_public_token(
     exchange_request: PlaidPublicTokenExchange,
     background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_verified_user),
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """
@@ -218,7 +224,7 @@ async def exchange_public_token(
 
 @router.get("/items", response_model=List[Dict[str, Any]])
 async def get_linked_items(
-    current_user: User = Depends(get_current_verified_user),
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ) -> List[Dict[str, Any]]:
     """
@@ -267,7 +273,7 @@ async def get_linked_items(
 @router.delete("/items/{item_id}")
 async def remove_linked_item(
     item_id: str,
-    current_user: User = Depends(get_current_verified_user),
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ) -> Dict[str, str]:
     """
@@ -323,7 +329,7 @@ async def remove_linked_item(
 async def sync_transactions(
     item_id: str,
     background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_verified_user),
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """

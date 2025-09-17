@@ -1,9 +1,9 @@
 'use client'
 
 import React, { useCallback, useState, useEffect } from 'react'
-import { Button } from '@/components/ui/button'
-import { Loading } from '@/components/ui/loading'
-import { accountsApi } from '@/lib/api/accounts'
+import { Button } from '../ui/button'
+import { Loading } from '../ui/loading'
+import { accountsApi } from '../../lib/api/accounts'
 import { CreditCard, AlertCircle } from 'lucide-react'
 
 // Define types for Plaid Link
@@ -50,22 +50,34 @@ export function PlaidLink({
     const script = document.createElement('script')
     script.src = 'https://cdn.plaid.com/link/v2/stable/link-initialize.js'
     script.async = true
+    script.onload = () => {
+      console.log('Plaid script loaded successfully')
+    }
+    script.onerror = () => {
+      console.error('Failed to load Plaid script')
+      setError('Failed to load Plaid Link. Please refresh the page.')
+    }
     document.body.appendChild(script)
 
     return () => {
-      document.body.removeChild(script)
+      if (document.body.contains(script)) {
+        document.body.removeChild(script)
+      }
     }
   }, [])
 
   // Get link token from backend
   const getLinkToken = useCallback(async () => {
+    console.log('Getting Plaid link token...')
     setIsLoading(true)
     setError(null)
-    
+
     try {
       const response = await accountsApi.getPlaidLinkToken()
+      console.log('Link token received:', response)
       setLinkToken(response.link_token)
     } catch (err: any) {
+      console.error('Failed to get link token:', err)
       const errorMessage = err.message || 'Failed to initialize Plaid Link'
       setError(errorMessage)
       onError(errorMessage)
@@ -76,7 +88,9 @@ export function PlaidLink({
 
   // Initialize Plaid Link when we have a token
   useEffect(() => {
+    console.log('Plaid init check - linkToken:', !!linkToken, 'window.Plaid:', !!window.Plaid)
     if (linkToken && window.Plaid) {
+      console.log('Creating Plaid handler with token:', linkToken)
       const handler = window.Plaid.create({
         token: linkToken,
         env: process.env.NEXT_PUBLIC_PLAID_ENV || 'sandbox',
@@ -120,17 +134,32 @@ export function PlaidLink({
     }
   }, [plaidHandler])
 
+  // Automatically get link token when component mounts
+  useEffect(() => {
+    getLinkToken()
+  }, [getLinkToken])
+
   const handleConnect = async () => {
+    // If no link token yet, get one first
     if (!linkToken) {
       await getLinkToken()
       return
     }
 
+    // If Plaid script isn't loaded yet
+    if (!window.Plaid) {
+      setError('Plaid is still loading. Please try again in a moment.')
+      return
+    }
+
+    // If handler exists, open it
     if (plaidHandler) {
       plaidHandler.open()
     } else {
-      setError('Plaid Link is not ready. Please try again.')
-      onError('Plaid Link is not ready. Please try again.')
+      // Try to create handler again if it doesn't exist
+      setError('Initializing Plaid Link...')
+      // Trigger re-creation of handler by setting a new link token
+      await getLinkToken()
     }
   }
 

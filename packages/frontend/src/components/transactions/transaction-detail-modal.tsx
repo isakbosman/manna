@@ -13,13 +13,13 @@ import {
   MessageSquareIcon,
   BrainIcon
 } from 'lucide-react'
-import { Modal } from '@/components/ui/modal'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
+import { Modal } from '../ui/modal'
+import { Button } from '../ui/button'
+import { Input } from '../ui/input'
+import { Badge } from '../ui/badge'
 import { Transaction, transactionsApi, Account, categoriesApi } from '@/lib/api'
 import { CategoryPicker } from './category-picker'
-import { cn } from '@/lib/utils'
+import { cn } from '../../lib/utils'
 import { format } from 'date-fns'
 
 interface TransactionDetailModalProps {

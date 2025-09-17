@@ -1,4 +1,4 @@
-import { api } from '@/lib/api'
+import { api } from '../api'
 
 export interface Account {
   id: string
@@ -50,7 +50,13 @@ export interface Institution {
 export const accountsApi = {
   // Get all user accounts
   getAccounts: async (): Promise<Account[]> => {
-    return api.get('/api/v1/accounts')
+    const response = await api.get('/api/v1/accounts')
+    // Handle paginated response
+    if (response && typeof response === 'object' && 'accounts' in response) {
+      return response.accounts
+    }
+    // Fallback for direct array response
+    return Array.isArray(response) ? response : []
   },
 
   // Get a specific account by ID

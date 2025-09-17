@@ -5,7 +5,7 @@ Plaid API integration service for financial data access.
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 import logging
-from plaid import ApiClient, Configuration, Environment
+from plaid import ApiClient, Configuration
 from plaid.api import plaid_api
 from plaid.model.link_token_create_request import LinkTokenCreateRequest
 from plaid.model.link_token_create_request_user import LinkTokenCreateRequestUser
@@ -32,8 +32,17 @@ class PlaidService:
     
     def __init__(self):
         """Initialize Plaid client with configuration."""
+        # Map environment string to Plaid Environment
+        # Note: Plaid SDK v12+ changed the Environment values
+        env_map = {
+            'sandbox': 'https://sandbox.plaid.com',
+            'development': 'https://development.plaid.com',
+            'production': 'https://production.plaid.com'
+        }
+        host_url = env_map.get(settings.plaid_environment, 'https://sandbox.plaid.com')
+
         configuration = Configuration(
-            host=getattr(Environment, settings.plaid_environment, Environment.Sandbox),
+            host=host_url,
             api_key={
                 'clientId': settings.plaid_client_id,
                 'secret': settings.plaid_secret,
@@ -43,12 +52,15 @@ class PlaidService:
         self.client = plaid_api.PlaidApi(api_client)
         
         # Map string products to Plaid Products enum
+        # Note: 'accounts' is not a valid product, it's included with other products
         self.products = []
         for product in settings.plaid_products:
             if product == "transactions":
                 self.products.append(Products('transactions'))
             elif product == "accounts":
-                self.products.append(Products('accounts'))
+                # Skip 'accounts' as it's not a valid Plaid product
+                # Account data is automatically included with other products
+                continue
             elif product == "identity":
                 self.products.append(Products('identity'))
             elif product == "investments":
@@ -77,18 +89,27 @@ class PlaidService:
             Dict containing link_token and expiration
         """
         try:
-            request = LinkTokenCreateRequest(
-                products=self.products if not access_token else [],
-                client_name=settings.app_name,
-                country_codes=self.country_codes,
-                language='en',
-                user=LinkTokenCreateRequestUser(
+            # Build request parameters
+            request_params = {
+                "products": self.products if not access_token else [],
+                "client_name": settings.app_name,
+                "country_codes": self.country_codes,
+                "language": 'en',
+                "user": LinkTokenCreateRequestUser(
                     client_user_id=str(user_id),
                     legal_name=user_name
-                ),
-                webhook=settings.plaid_webhook_url if settings.plaid_webhook_url else None,
-                access_token=access_token
-            )
+                )
+            }
+
+            # Add webhook URL if configured
+            if settings.plaid_webhook_url:
+                request_params["webhook"] = settings.plaid_webhook_url
+
+            # Add access token for update mode
+            if access_token:
+                request_params["access_token"] = access_token
+
+            request = LinkTokenCreateRequest(**request_params)
             
             response = self.client.link_token_create(request)
             

@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { AuthProvider } from './auth-provider'
 import { ThemeProvider } from './theme-provider'
-import { ToastProvider } from '@/components/ui/toast'
+import { ToastProvider } from '../ui/toast'
 
 // Create a client
 const queryClient = new QueryClient({

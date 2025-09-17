@@ -24,7 +24,7 @@ services:
     image: redis:7-alpine
     container_name: manna-redis
     ports:
-      - '6379:6379'
+      - '6380:6379'
     volumes:
       - redis_data:/data
     healthcheck:
@@ -35,13 +35,16 @@ services:
 
   backend:
     build:
-      context: ./packages/backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./packages/backend/Dockerfile
     container_name: manna-backend
     environment:
       - ENVIRONMENT=development
       - DATABASE_URL=postgresql://manna:manna@postgres:5432/manna_dev
       - REDIS_URL=redis://redis:6379/0
+      - PLAID_CLIENT_ID=677453d8ec5d8b0026b553fd
+      - PLAID_SECRET=8b2365aea187eff8e24746384a9ee8
+      - PLAID_ENVIRONMENT=sandbox
     ports:
       - '8000:8000'
     volumes:
@@ -58,20 +61,20 @@ services:
 
   frontend:
     build:
-      context: ./packages/frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./packages/frontend/Dockerfile
     container_name: manna-frontend
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000
     ports:
       - '3000:3000'
     volumes:
-      - ./packages/frontend:/app
-      - /app/node_modules
-      - /app/.next
+      - ./packages/frontend:/app/packages/frontend
+      - /app/packages/frontend/node_modules
+      - /app/packages/frontend/.next
     depends_on:
       - backend
-    command: npm run dev
+    command: pnpm dev
 
 volumes:
   postgres_data:

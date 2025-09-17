@@ -1,9 +1,6 @@
 'use client'
 
 import React from 'react'
-import { useRouter } from 'next/navigation'
-import { useAuth } from '@/components/providers/auth-provider'
-import { Loading } from '@/components/ui/loading'
 
 interface ProtectedRouteProps {
   children: React.ReactNode
@@ -13,11 +10,8 @@ interface ProtectedRouteProps {
 }
 
 /**
- * ProtectedRoute component that ensures user is authenticated before rendering children
- * @param children - The components to render if user is authenticated
- * @param redirectTo - Where to redirect if not authenticated (default: '/auth/login')
- * @param requiredRole - Optional role requirement
- * @param fallback - Optional custom loading component
+ * ProtectedRoute component - DISABLED for local development
+ * Always renders children without authentication checks
  */
 export function ProtectedRoute({
   children,
@@ -25,81 +19,38 @@ export function ProtectedRoute({
   requiredRole,
   fallback
 }: ProtectedRouteProps) {
-  const { user, isLoading, isAuthenticated } = useAuth()
-  const router = useRouter()
-
-  React.useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.push(redirectTo)
-    }
-  }, [isAuthenticated, isLoading, router, redirectTo])
-
-  // Show loading state
-  if (isLoading) {
-    return fallback || (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loading size="lg" />
-      </div>
-    )
-  }
-
-  // Not authenticated - don't render children
-  if (!isAuthenticated || !user) {
-    return null
-  }
-
-  // Check role requirement
-  if (requiredRole && user.role !== requiredRole) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h1>
-          <p className="text-gray-600">You don't have permission to access this page.</p>
-        </div>
-      </div>
-    )
-  }
-
-  // Render protected content
+  // Always render children for local development
   return <>{children}</>
 }
 
 /**
- * HOC version of ProtectedRoute for wrapping page components
+ * HOC version of ProtectedRoute - DISABLED for local development
  */
 export function withProtectedRoute<P extends object>(
   Component: React.ComponentType<P>,
   options: Omit<ProtectedRouteProps, 'children'> = {}
 ) {
   return function ProtectedComponent(props: P) {
-    return (
-      <ProtectedRoute {...options}>
-        <Component {...props} />
-      </ProtectedRoute>
-    )
+    // Always render component for local development
+    return <Component {...props} />
   }
 }
 
 /**
- * Hook to check if user has required permissions
+ * Hook to check if user has required permissions - DISABLED for local development
+ * Always returns true for all permission checks
  */
 export function usePermissions() {
-  const { user, isAuthenticated } = useAuth()
-
-  const hasRole = React.useCallback((role: string) => {
-    return isAuthenticated && user?.role === role
-  }, [isAuthenticated, user])
-
-  const hasAnyRole = React.useCallback((roles: string[]) => {
-    return isAuthenticated && user?.role && roles.includes(user.role)
-  }, [isAuthenticated, user])
-
   return {
-    isAuthenticated,
-    user,
-    hasRole,
-    hasAnyRole,
-    isAdmin: hasRole('admin'),
-    isUser: hasRole('user')
+    isAuthenticated: true,
+    user: {
+      id: '00000000-0000-0000-0000-000000000001',
+      email: 'local@manna.finance',
+      role: 'admin'
+    },
+    hasRole: () => true,
+    hasAnyRole: () => true,
+    isAdmin: true,
+    isUser: true
   }
 }

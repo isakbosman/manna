@@ -9,14 +9,14 @@ import {
   CreditCardIcon,
   SearchIcon
 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
-import { Modal } from '@/components/ui/modal'
-import { CustomSelect } from '@/components/ui/select'
-import { Category, categoriesApi, CategorySpending } from '@/lib/api/categories'
-import { cn } from '@/lib/utils'
+import { Button } from '../ui/button'
+import { Card } from '../ui/card'
+import { Badge } from '../ui/badge'
+import { Input } from '../ui/input'
+import { Modal } from '../ui/modal'
+import { CustomSelect } from '../ui/select'
+import { Category, categoriesApi, CategorySpending } from '../../lib/api/categories'
+import { cn } from '../../lib/utils'
 
 interface CategoryManagementProps {
   categories: Category[]

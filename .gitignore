@@ -115,3 +115,5 @@ docs/_templates/
 !yarn.lock
 !Pipfile.lock
 !poetry.lock
+
+*node_modules*

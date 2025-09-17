@@ -33,13 +33,10 @@ const apiClient: AxiosInstance = axios.create({
   },
 })
 
-// Request interceptor to add auth token
+// Request interceptor - DISABLED for local development
 apiClient.interceptors.request.use(
   (config) => {
-    const token = Cookies.get('access_token')
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
-    }
+    // No auth token needed for local development
     return config
   },
   (error) => {
@@ -47,40 +44,11 @@ apiClient.interceptors.request.use(
   }
 )
 
-// Response interceptor for error handling
+// Response interceptor for error handling - SIMPLIFIED for local development
 apiClient.interceptors.response.use(
   (response: AxiosResponse) => response,
   async (error: AxiosError) => {
-    const originalRequest = error.config as AxiosRequestConfig & { _retry?: boolean }
-
-    // Handle 401 errors (unauthorized)
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true
-      
-      try {
-        const refreshToken = Cookies.get('refresh_token')
-        if (refreshToken) {
-          const response = await axios.post(`${API_BASE_URL}/api/v1/auth/refresh`, {
-            refresh_token: refreshToken
-          })
-          
-          const { access_token } = response.data
-          Cookies.set('access_token', access_token, { expires: 1 })
-          
-          // Retry original request with new token
-          if (originalRequest.headers) {
-            originalRequest.headers.Authorization = `Bearer ${access_token}`
-          }
-          return apiClient(originalRequest)
-        }
-      } catch (refreshError) {
-        // Refresh failed, redirect to login
-        Cookies.remove('access_token')
-        Cookies.remove('refresh_token')
-        window.location.href = '/auth/login'
-        return Promise.reject(refreshError)
-      }
-    }
+    // No auth refresh needed for local development
 
     // Handle other errors
     const apiError: ApiError = {
@@ -98,8 +66,8 @@ apiClient.interceptors.response.use(
 export const api = {
   // GET request
   get: async <T = any>(url: string, config?: AxiosRequestConfig): Promise<T> => {
-    const response = await apiClient.get<ApiResponse<T>>(url, config)
-    return response.data.data
+    const response = await apiClient.get<T>(url, config)
+    return response.data
   },
 
   // POST request
@@ -108,8 +76,8 @@ export const api = {
     data?: any, 
     config?: AxiosRequestConfig
   ): Promise<T> => {
-    const response = await apiClient.post<ApiResponse<T>>(url, data, config)
-    return response.data.data
+    const response = await apiClient.post<T>(url, data, config)
+    return response.data
   },
 
   // PUT request
@@ -118,8 +86,8 @@ export const api = {
     data?: any, 
     config?: AxiosRequestConfig
   ): Promise<T> => {
-    const response = await apiClient.put<ApiResponse<T>>(url, data, config)
-    return response.data.data
+    const response = await apiClient.put<T>(url, data, config)
+    return response.data
   },
 
   // PATCH request
@@ -128,14 +96,14 @@ export const api = {
     data?: any, 
     config?: AxiosRequestConfig
   ): Promise<T> => {
-    const response = await apiClient.patch<ApiResponse<T>>(url, data, config)
-    return response.data.data
+    const response = await apiClient.patch<T>(url, data, config)
+    return response.data
   },
 
   // DELETE request
   delete: async <T = any>(url: string, config?: AxiosRequestConfig): Promise<T> => {
-    const response = await apiClient.delete<ApiResponse<T>>(url, config)
-    return response.data.data
+    const response = await apiClient.delete<T>(url, config)
+    return response.data
   },
 
   // Upload file

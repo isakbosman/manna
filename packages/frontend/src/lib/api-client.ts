@@ -19,16 +19,10 @@ const apiClient: AxiosInstance = axios.create({
   withCredentials: true, // Send cookies with requests
 });
 
-// Request interceptor to add authentication token
+// Request interceptor - DISABLED for local development
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    // Get token from localStorage or cookie
-    const token = localStorage.getItem('access_token');
-    
-    if (token && config.headers) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    
+    // No auth token needed for local development
     return config;
   },
   (error: AxiosError) => {
@@ -36,41 +30,11 @@ apiClient.interceptors.request.use(
   }
 );
 
-// Response interceptor for error handling and token refresh
+// Response interceptor - SIMPLIFIED for local development
 apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
-    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
-    
-    // Handle 401 Unauthorized - attempt token refresh
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-      
-      try {
-        const refreshToken = localStorage.getItem('refresh_token');
-        if (refreshToken) {
-          const response = await axios.post(`${API_BASE_URL}${API_PREFIX}/auth/refresh`, {
-            refresh_token: refreshToken,
-          });
-          
-          const { access_token } = response.data;
-          localStorage.setItem('access_token', access_token);
-          
-          // Retry original request with new token
-          if (originalRequest.headers) {
-            originalRequest.headers.Authorization = `Bearer ${access_token}`;
-          }
-          return apiClient(originalRequest);
-        }
-      } catch (refreshError) {
-        // Refresh failed, redirect to login
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        window.location.href = '/login';
-        return Promise.reject(refreshError);
-      }
-    }
-    
+    // No auth refresh needed for local development
     return Promise.reject(error);
   }
 );

@@ -25,13 +25,13 @@ import {
   SparklesIcon,
   SearchIcon
 } from 'lucide-react'
-import { CustomSelect, CustomSelectOption } from '@/components/ui/select'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Modal } from '@/components/ui/modal'
-import { Category, categoriesApi } from '@/lib/api/categories'
-import { cn } from '@/lib/utils'
+import { CustomSelect, CustomSelectOption } from '../ui/select'
+import { Badge } from '../ui/badge'
+import { Button } from '../ui/button'
+import { Input } from '../ui/input'
+import { Modal } from '../ui/modal'
+import { Category, categoriesApi } from '../../lib/api/categories'
+import { cn } from '../../lib/utils'
 
 // Category icons mapping
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {

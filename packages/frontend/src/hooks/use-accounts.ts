@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { accountsApi, Account } from '@/lib/api/accounts'
+import { accountsApi, Account } from '../lib/api/accounts'
 import { useState, useCallback } from 'react'
 
 export interface UseAccountsReturn {

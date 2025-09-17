@@ -5,28 +5,8 @@ export function middleware(request: NextRequest) {
   // Clone the request headers
   const requestHeaders = new Headers(request.headers)
   
-  // Check for authentication on protected routes
-  const { pathname } = request.nextUrl
-  const isAuthPage = pathname.startsWith('/auth')
-  const isPublicPage = ['/', '/about', '/contact', '/terms', '/privacy'].includes(pathname)
-  const isApiRoute = pathname.startsWith('/api')
-  const isProtectedRoute = !isAuthPage && !isPublicPage && !isApiRoute
-  
-  // Get authentication token from cookies
-  const accessToken = request.cookies.get('access_token')?.value
-  const isAuthenticated = !!accessToken
-  
-  // Redirect logic for authentication
-  if (isProtectedRoute && !isAuthenticated) {
-    const loginUrl = new URL('/auth/login', request.url)
-    loginUrl.searchParams.set('redirect', pathname)
-    return NextResponse.redirect(loginUrl)
-  }
-  
-  // Redirect authenticated users away from auth pages to dashboard
-  if (isAuthPage && isAuthenticated && !pathname.includes('/auth/logout')) {
-    return NextResponse.redirect(new URL('/dashboard', request.url))
-  }
+  // AUTH DISABLED for local development
+  // No authentication checks needed
   
   // Add security headers
   const response = NextResponse.next({

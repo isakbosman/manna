@@ -48,15 +48,16 @@ class ErrorHandlerMiddleware(BaseHTTPMiddleware):
                 message = str(e)
                 details = [{"message": traceback.format_exc()}]
             
+            error_response = ErrorResponse(
+                error="InternalServerError",
+                message=message,
+                details=details,
+                request_id=request_id,
+                timestamp=datetime.utcnow()
+            )
             return JSONResponse(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                content=ErrorResponse(
-                    error="InternalServerError",
-                    message=message,
-                    details=details,
-                    request_id=request_id,
-                    timestamp=datetime.utcnow()
-                ).dict()
+                content=error_response.model_dump(mode='json')
             )
 
 
@@ -66,14 +67,15 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
     """
     request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
     
+    error_response = ErrorResponse(
+        error=exc.__class__.__name__,
+        message=exc.detail,
+        request_id=request_id,
+        timestamp=datetime.utcnow()
+    )
     return JSONResponse(
         status_code=exc.status_code,
-        content=ErrorResponse(
-            error=exc.__class__.__name__,
-            message=exc.detail,
-            request_id=request_id,
-            timestamp=datetime.utcnow()
-        ).dict()
+        content=error_response.model_dump(mode='json')
     )
 
 
@@ -93,15 +95,16 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             code=error["type"]
         ))
     
+    error_response = ErrorResponse(
+        error="ValidationError",
+        message="Request validation failed",
+        details=details,
+        request_id=request_id,
+        timestamp=datetime.utcnow()
+    )
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        content=ErrorResponse(
-            error="ValidationError",
-            message="Request validation failed",
-            details=details,
-            request_id=request_id,
-            timestamp=datetime.utcnow()
-        ).dict()
+        content=error_response.model_dump(mode='json')
     )
 
 
@@ -125,15 +128,16 @@ async def database_exception_handler(request: Request, exc: SQLAlchemyError) -> 
         message = f"Database error: {str(exc)}"
         details = [{"message": str(exc.__class__.__name__)}]
     
+    error_response = ErrorResponse(
+        error="DatabaseError",
+        message=message,
+        details=details,
+        request_id=request_id,
+        timestamp=datetime.utcnow()
+    )
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content=ErrorResponse(
-            error="DatabaseError",
-            message=message,
-            details=details,
-            request_id=request_id,
-            timestamp=datetime.utcnow()
-        ).dict()
+        content=error_response.model_dump(mode='json')
     )
 
 

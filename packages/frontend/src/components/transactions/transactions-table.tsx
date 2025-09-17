@@ -13,12 +13,12 @@ import {
   BuildingIcon,
   BrainIcon
 } from 'lucide-react'
-import { DataTable } from '@/components/ui/data-table'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { CustomSelect } from '@/components/ui/select'
+import { DataTable } from '../ui/data-table'
+import { Button } from '../ui/button'
+import { Badge } from '../ui/badge'
+import { CustomSelect } from '../ui/select'
 import { Transaction, Account, Category, transactionsApi, categoriesApi } from '@/lib/api'
-import { cn } from '@/lib/utils'
+import { cn } from '../../lib/utils'
 import { format } from 'date-fns'
 
 interface TransactionsTableProps {

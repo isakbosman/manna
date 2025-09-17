@@ -30,6 +30,8 @@ from .routers import (
     ml_router,
 )
 from .routers.categories import router as categories_router
+from .routers.reports import router as reports_router
+from .routers.dashboard import router as dashboard_router
 from .schemas.common import HealthCheck
 from .utils.redis import check_redis_connection
 
@@ -106,6 +108,8 @@ app.include_router(transactions_router, prefix=f"{settings.api_prefix}/transacti
 app.include_router(categories_router, prefix=f"{settings.api_prefix}/categories", tags=["Categories"])
 app.include_router(plaid_router, prefix=f"{settings.api_prefix}/plaid", tags=["Plaid"])
 app.include_router(ml_router, prefix=f"{settings.api_prefix}/ml", tags=["Machine Learning"])
+app.include_router(reports_router, prefix=f"{settings.api_prefix}/reports", tags=["Reports"])
+app.include_router(dashboard_router, prefix=f"{settings.api_prefix}/dashboard", tags=["Dashboard"])
 
 
 @app.get("/", response_model=Dict[str, str])

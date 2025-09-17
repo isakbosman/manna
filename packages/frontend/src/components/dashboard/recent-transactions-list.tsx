@@ -1,8 +1,8 @@
 'use client'
 
 import React from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { formatCurrency } from '@/lib/utils'
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
+import { formatCurrency } from '../../lib/utils'
 import { format, parseISO, isToday, isYesterday, isThisWeek } from 'date-fns'
 import { 
   ArrowUpRight, 

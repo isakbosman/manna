@@ -97,8 +97,8 @@ async def register(
         full_name=user_create.full_name,
         hashed_password=hashed_password,
         is_active=True,
-        email_verified=False,
-        role="user"
+        is_verified=False,
+        is_superuser=False
     )
     
     db.add(db_user)
@@ -163,7 +163,7 @@ async def login(
         "sub": str(user.id),
         "email": user.email,
         "username": user.username,
-        "role": user.role
+        "is_superuser": user.is_superuser
     }
     
     access_token = create_access_token(
@@ -242,7 +242,7 @@ async def refresh_token(
             "sub": str(user.id),
             "email": user.email,
             "username": user.username,
-            "role": user.role
+            "is_superuser": user.is_superuser
         }
         
         new_access_token = create_access_token(
@@ -431,7 +431,7 @@ async def verify_email(
         )
     
     # Update email verified status
-    user.email_verified = True
+    user.is_verified = True
     db.commit()
     
     # Delete verification token
@@ -440,6 +440,28 @@ async def verify_email(
     logger.info(f"Email verified for: {user.email}")
     
     return {"message": "Email has been verified successfully"}
+
+
+@router.get("/me")
+async def get_current_user_info(
+    current_user: User = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """
+    Get current user information.
+    
+    Returns basic user information for the authenticated user.
+    """
+    return {
+        "id": str(current_user.id),
+        "email": current_user.email,
+        "username": current_user.username,
+        "full_name": current_user.full_name,
+        "is_active": current_user.is_active,
+        "is_superuser": current_user.is_superuser,
+        "is_verified": current_user.is_verified,
+        "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
+        "updated_at": current_user.updated_at.isoformat() if current_user.updated_at else None
+    }
 
 
 @router.post("/resend-verification", response_model=Dict[str, str])
@@ -453,7 +475,7 @@ async def resend_verification_email(
     - Generates new verification token
     - Sends verification email
     """
-    if current_user.email_verified:
+    if current_user.is_verified:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already verified"

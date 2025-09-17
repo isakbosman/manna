@@ -1,21 +1,22 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { DashboardLayout } from '@/components/layout/dashboard-layout'
-import { withAuth } from '@/components/providers/auth-provider'
-import { PlaidLink } from '@/components/plaid/plaid-link'
-import { ConnectionStatus } from '@/components/accounts/connection-status'
+import { DashboardLayout } from '../../components/layout/dashboard-layout'
+import { TestPlaid } from './test-plaid'
+// import { withAuth } from '../../components/providers/auth-provider' // DISABLED for local dev
+import { PlaidLink } from '../../components/plaid/plaid-link'
+import { ConnectionStatus } from '../../components/accounts/connection-status'
 import { 
   Card, 
   CardContent, 
   CardDescription, 
   CardHeader, 
   CardTitle 
-} from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Loading } from '@/components/ui/loading'
-import { accountsApi, Account, Institution } from '@/lib/api/accounts'
-import { formatCurrency } from '@/lib/utils'
+} from '../../components/ui/card'
+import { Button } from '../../components/ui/button'
+import { Loading } from '../../components/ui/loading'
+import { accountsApi, Account, Institution } from '../../lib/api/accounts'
+import { formatCurrency } from '../../lib/utils'
 import { 
   CreditCard, 
   Building2, 
@@ -24,12 +25,12 @@ import {
   CheckCircle, 
   AlertCircle,
   Plus,
-  Sync,
+  RefreshCcw,
   Eye,
   EyeOff
 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useSuccessToast, useErrorToast } from '@/components/ui/toast'
+import { useSuccessToast, useErrorToast } from '../../components/ui/toast'
 
 interface AccountCardProps {
   account: Account
@@ -335,6 +336,7 @@ function AccountsPage() {
       title="Accounts"
       description="Manage your connected bank accounts and financial institutions"
     >
+      <TestPlaid />
       {/* Summary Stats */}
       <div className="grid gap-4 md:grid-cols-3 mb-6">
         <Card>
@@ -391,7 +393,7 @@ function AccountsPage() {
           {syncMutation.isPending ? (
             <Loading size="sm" className="mr-2" />
           ) : (
-            <Sync className="w-4 h-4 mr-2" />
+            <RefreshCcw className="w-4 h-4 mr-2" />
           )}
           Sync All
         </Button>
@@ -419,21 +421,21 @@ function AccountsPage() {
       {showAddAccount && (
         <Card className="mb-6">
           <CardHeader>
-            <CardTitle>Connect New Bank Account</CardTitle>
+            <CardTitle>Connect Bank Account</CardTitle>
             <CardDescription>
-              Use Plaid to securely connect your bank account and import transactions
+              Use Plaid to securely connect your bank account and automatically import transactions
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex gap-4 items-center">
               <div className="flex-1">
-                <PlaidLink 
+                <PlaidLink
                   onSuccess={handlePlaidSuccess}
                   onError={handlePlaidError}
                 />
               </div>
-              <Button 
-                variant="ghost" 
+              <Button
+                variant="ghost"
                 onClick={() => setShowAddAccount(false)}
               >
                 Cancel
@@ -506,4 +508,5 @@ function AccountsPage() {
 }
 
 // Export protected version
-export default withAuth(AccountsPage)
+// Export unprotected version for local development
+export default AccountsPage

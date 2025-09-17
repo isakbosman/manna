@@ -7,11 +7,11 @@ import {
   XCircleIcon,
   AlertCircleIcon
 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Modal } from '@/components/ui/modal'
-import { Badge } from '@/components/ui/badge'
+import { Button } from '../ui/button'
+import { Modal } from '../ui/modal'
+import { Badge } from '../ui/badge'
 import { transactionsApi, TransactionFilters } from '@/lib/api'
-import { cn } from '@/lib/utils'
+import { cn } from '../../lib/utils'
 
 interface ImportExportProps {
   filters?: TransactionFilters

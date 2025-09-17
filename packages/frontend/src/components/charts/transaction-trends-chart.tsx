@@ -13,8 +13,8 @@ import {
   Area,
   AreaChart
 } from 'recharts'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { formatCurrency } from '@/lib/utils'
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
+import { formatCurrency } from '../../lib/utils'
 import { format, parseISO } from 'date-fns'
 
 interface TrendData {

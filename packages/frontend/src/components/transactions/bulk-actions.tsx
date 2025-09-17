@@ -7,12 +7,12 @@ import {
   CheckIcon,
   XIcon
 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Modal } from '@/components/ui/modal'
+import { Button } from '../ui/button'
+import { Badge } from '../ui/badge'
+import { Modal } from '../ui/modal'
 import { CategoryPicker } from './category-picker'
 import { Transaction, transactionsApi, categoriesApi } from '@/lib/api'
-import { cn } from '@/lib/utils'
+import { cn } from '../../lib/utils'
 
 interface BulkActionsProps {
   selectedTransactions: Transaction[]

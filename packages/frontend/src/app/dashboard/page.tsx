@@ -2,32 +2,43 @@
 
 import React, { useState, useMemo } from 'react'
 import Link from 'next/link'
-import { DashboardLayout } from '@/components/layout/dashboard-layout'
-import { withAuth } from '@/components/providers/auth-provider'
-import { useAccounts } from '@/hooks/use-accounts'
-import { Loading } from '@/components/ui/loading'
-import { 
-  Card, 
-  CardContent, 
-  CardDescription, 
-  CardHeader, 
-  CardTitle 
-} from '@/components/ui/card'
-import { formatCurrency, calculateSavingsRate, calculateFinancialHealthScore, formatPercentage, calculatePercentageChange } from '@/lib/utils'
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  DollarSign, 
-  CreditCard, 
-  Activity, 
+import { DashboardLayout } from '../../components/layout/dashboard-layout'
+import { useAccounts } from '../../hooks/use-accounts'
+import {
+  useFinancialSummary,
+  useRecentTransactions,
+  useSpendingByCategory,
+  useTransactionTrends,
+  useCashFlow,
+  useAlerts,
+  useKPIs
+} from '../../hooks/use-dashboard'
+import { Loading } from '../../components/ui/loading'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle
+} from '../../components/ui/card'
+import {
+  TrendingUp,
+  TrendingDown,
+  DollarSign,
+  CreditCard,
+  Activity,
   Users,
   PiggyBank,
   Target,
   BarChart3,
-  RefreshCw
+  RefreshCw,
+  AlertCircle,
+  Package,
+  FileText,
+  TrendingUpIcon
 } from 'lucide-react'
 
-// Import new dashboard components
+// Import dashboard components
 import {
   KPIWidget,
   FinancialSummaryCard,
@@ -36,198 +47,67 @@ import {
   DateRangeSelector,
   AlertsNotificationsPanel,
   type DateRange,
-  type Transaction,
-  type Alert
-} from '@/components/dashboard'
+} from '../../components/dashboard'
 
 // Import chart components
 import {
   SpendingByCategoryChart,
   TransactionTrendsChart,
   CashFlowChart
-} from '@/components/charts'
+} from '../../components/charts'
 
 // Import date utilities
 import { subDays, format } from 'date-fns'
 
-// Mock data for comprehensive financial dashboard
-const mockFinancialStats = {
-  monthlyIncome: 8750.00,
-  monthlyExpenses: 6234.75,
-  previousMonthIncome: 8100.00,
-  previousMonthExpenses: 6800.00,
-  incomeChange: 8.2,
-  expenseChange: -3.1,
-  savingsGoal: 2000.00,
-  currentSavings: 1650.00
+// Empty state component
+function EmptyState({
+  icon: Icon,
+  title,
+  description,
+  actionText,
+  onAction
+}: {
+  icon: any
+  title: string
+  description: string
+  actionText?: string
+  onAction?: () => void
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center py-12 text-center">
+      <Icon className="h-12 w-12 text-gray-400 mb-4" />
+      <h3 className="text-lg font-medium text-gray-900 mb-2">{title}</h3>
+      <p className="text-sm text-gray-500 mb-4 max-w-sm">{description}</p>
+      {actionText && onAction && (
+        <button
+          onClick={onAction}
+          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+        >
+          {actionText}
+        </button>
+      )}
+    </div>
+  )
 }
 
-// Mock transaction data
-const mockTransactions: Transaction[] = [
-  {
-    id: '1',
-    date: '2024-09-08',
-    description: 'Salary Deposit',
-    amount: 5000.00,
-    category: 'Income',
-    account: 'Chase Checking',
-    merchant: 'Employer Direct Deposit',
-    type: 'credit'
-  },
-  {
-    id: '2',
-    date: '2024-09-07',
-    description: 'Grocery Store',
-    amount: -156.78,
-    category: 'Food & Dining',
-    account: 'Chase Checking',
-    merchant: 'Whole Foods Market',
-    type: 'debit'
-  },
-  {
-    id: '3',
-    date: '2024-09-06',
-    description: 'Gas Station',
-    amount: -45.32,
-    category: 'Transportation',
-    account: 'Chase Credit',
-    merchant: 'Shell',
-    type: 'debit'
-  },
-  {
-    id: '4',
-    date: '2024-09-05',
-    description: 'Rent Payment',
-    amount: -1800.00,
-    category: 'Housing',
-    account: 'Chase Checking',
-    merchant: 'Property Management Co',
-    type: 'debit'
-  },
-  {
-    id: '5',
-    date: '2024-09-04',
-    description: 'Freelance Payment',
-    amount: 750.00,
-    category: 'Income',
-    account: 'PayPal',
-    merchant: 'Client ABC Inc',
-    type: 'credit'
-  },
-  {
-    id: '6',
-    date: '2024-09-03',
-    description: 'Coffee Shop',
-    amount: -12.50,
-    category: 'Food & Dining',
-    account: 'Chase Credit',
-    merchant: 'Starbucks',
-    type: 'debit'
-  },
-  {
-    id: '7',
-    date: '2024-09-02',
-    description: 'Utilities Payment',
-    amount: -185.43,
-    category: 'Utilities',
-    account: 'Chase Checking',
-    merchant: 'Electric Company',
-    type: 'debit'
-  },
-  {
-    id: '8',
-    date: '2024-09-01',
-    description: 'Investment Transfer',
-    amount: -500.00,
-    category: 'Transfer',
-    account: 'Chase Checking',
-    merchant: 'Vanguard',
-    type: 'debit'
-  }
-]
-
-// Mock spending by category data
-const mockSpendingData = [
-  { name: 'Housing', value: 1800, color: '#ef4444' },
-  { name: 'Food & Dining', value: 580, color: '#f97316' },
-  { name: 'Transportation', value: 320, color: '#eab308' },
-  { name: 'Utilities', value: 285, color: '#22c55e' },
-  { name: 'Entertainment', value: 180, color: '#3b82f6' },
-  { name: 'Shopping', value: 150, color: '#8b5cf6' },
-  { name: 'Healthcare', value: 120, color: '#ec4899' }
-]
-
-// Mock trend data for charts
-const mockTrendData = [
-  { date: '2024-08-01', income: 8100, expenses: -6800, netFlow: 1300 },
-  { date: '2024-08-02', income: 0, expenses: -280, netFlow: -280 },
-  { date: '2024-08-03', income: 750, expenses: -150, netFlow: 600 },
-  { date: '2024-08-04', income: 0, expenses: -90, netFlow: -90 },
-  { date: '2024-08-05', income: 0, expenses: -1800, netFlow: -1800 },
-  { date: '2024-08-06', income: 0, expenses: -45, netFlow: -45 },
-  { date: '2024-08-07', income: 0, expenses: -157, netFlow: -157 },
-  { date: '2024-08-08', income: 5000, expenses: 0, netFlow: 5000 }
-]
-
-// Mock cash flow data
-const mockCashFlowData = [
-  { month: 'Jun', income: 7800, expenses: -6200, netFlow: 1600, runningBalance: 15600 },
-  { month: 'Jul', income: 8100, expenses: -6800, netFlow: 1300, runningBalance: 16900 },
-  { month: 'Aug', income: 8750, expenses: -6234, netFlow: 2516, runningBalance: 19416 },
-]
-
-// Mock alerts data
-const mockAlerts: Alert[] = [
-  {
-    id: '1',
-    type: 'warning',
-    title: 'High Credit Card Utilization',
-    message: 'Your credit utilization is at 85% on Chase Freedom card',
-    category: 'account',
-    priority: 'high',
-    created_at: '2024-09-08T10:00:00Z',
-    data: {
-      account_name: 'Chase Freedom',
-      utilization: 0.85,
-      amount: 4250
-    },
-    actionable: true
-  },
-  {
-    id: '2',
-    type: 'info',
-    title: 'Monthly Budget Update',
-    message: 'You\'re 82% through your monthly dining budget',
-    category: 'budget',
-    priority: 'medium',
-    created_at: '2024-09-07T15:30:00Z',
-    data: {
-      amount: 580
-    }
-  },
-  {
-    id: '3',
-    type: 'success',
-    title: 'Savings Goal Progress',
-    message: 'Great job! You\'re ahead of your savings goal this month',
-    category: 'budget',
-    priority: 'low',
-    created_at: '2024-09-06T09:00:00Z',
-    data: {
-      amount: 1650
-    }
-  }
-]
-
 function DashboardPage() {
-  const { 
+  const {
     accounts,
     totalBalance,
     activeAccounts,
     isLoading: accountsLoading,
     error: accountsError,
-    refetch
+    refetch: refetchAccounts
   } = useAccounts()
+
+  // Fetch dashboard data from API
+  const { data: financialSummary, isLoading: summaryLoading, error: summaryError } = useFinancialSummary()
+  const { data: recentTransactions = [], isLoading: transactionsLoading } = useRecentTransactions(10)
+  const { data: spendingData = [], isLoading: spendingLoading } = useSpendingByCategory(30)
+  const { data: trendsData = [], isLoading: trendsLoading } = useTransactionTrends(30)
+  const { data: cashFlowData = [], isLoading: cashFlowLoading } = useCashFlow(6)
+  const { data: alerts = [], isLoading: alertsLoading } = useAlerts()
+  const { data: kpis, isLoading: kpisLoading } = useKPIs()
 
   // State for date range selector
   const [selectedDateRange, setSelectedDateRange] = useState<DateRange>({
@@ -238,141 +118,72 @@ function DashboardPage() {
 
   const [isRefreshing, setIsRefreshing] = useState(false)
 
-  // Calculate comprehensive financial metrics
-  const financialMetrics = useMemo(() => {
-    const savingsRate = calculateSavingsRate(
-      mockFinancialStats.monthlyIncome,
-      mockFinancialStats.monthlyExpenses
-    )
-    
-    const incomeChange = calculatePercentageChange(
-      mockFinancialStats.monthlyIncome,
-      mockFinancialStats.previousMonthIncome
-    )
-    
-    const expenseChange = calculatePercentageChange(
-      mockFinancialStats.monthlyExpenses,
-      mockFinancialStats.previousMonthExpenses
-    )
-    
-    const netWorth = totalBalance // Using actual account data
-    const monthlyNetFlow = mockFinancialStats.monthlyIncome - mockFinancialStats.monthlyExpenses
-    
-    const financialHealthScore = calculateFinancialHealthScore({
-      savingsRate,
-      debtToIncomeRatio: 25, // Mock value
-      creditUtilization: 45, // Mock value
-      emergencyFundMonths: 3.5 // Mock value
-    })
-
-    return {
-      savingsRate,
-      incomeChange,
-      expenseChange,
-      netWorth,
-      monthlyNetFlow,
-      financialHealthScore,
-      avgDailySpending: mockFinancialStats.monthlyExpenses / 30
-    }
-  }, [totalBalance, mockFinancialStats])
-
-  // Mock financial summary data
-  const financialSummaryData = {
-    totalAssets: Math.max(0, totalBalance + 50000), // Add mock investments
-    totalLiabilities: Math.max(0, -totalBalance + 15000), // Mock liabilities
-    netWorth: financialMetrics.netWorth,
-    liquidAssets: totalBalance,
-    monthlyChange: {
-      assets: 2500,
-      liabilities: -500,
-      netWorth: 3000
-    },
-    breakdown: {
-      checking: accounts.filter(a => a.type === 'checking').reduce((sum, a) => sum + a.balance_current, 0),
-      savings: accounts.filter(a => a.type === 'savings').reduce((sum, a) => sum + a.balance_current, 0),
-      investments: 35000, // Mock
-      creditCards: accounts.filter(a => a.type === 'credit').reduce((sum, a) => sum + a.balance_current, 0),
-      loans: -12000, // Mock
-      other: 0
-    }
-  }
-
   // Handle refresh functionality
   const handleRefresh = async () => {
     setIsRefreshing(true)
-    await refetch()
-    // Simulate additional data refresh
+    await Promise.all([
+      refetchAccounts(),
+      // Refetch all dashboard data
+    ])
     setTimeout(() => setIsRefreshing(false), 1000)
   }
 
-  // Define KPI widgets data
-  const kpiWidgets = [
-    {
-      title: 'Net Worth',
-      value: financialMetrics.netWorth,
-      format: 'currency' as const,
-      change: {
-        value: 3000,
-        type: 'currency' as const,
-        period: 'this month',
-        isPositive: true
-      },
-      icon: DollarSign,
-      description: 'Total assets minus liabilities',
-      color: 'success' as const
-    },
-    {
-      title: 'Monthly Cash Flow',
-      value: financialMetrics.monthlyNetFlow,
-      format: 'currency' as const,
-      change: {
-        value: financialMetrics.incomeChange,
-        type: 'percentage' as const,
-        period: 'vs last month'
-      },
-      icon: TrendingUp,
-      description: 'Income minus expenses'
-    },
-    {
-      title: 'Savings Rate',
-      value: financialMetrics.savingsRate,
-      format: 'percentage' as const,
-      icon: PiggyBank,
-      description: 'Percentage of income saved',
-      target: 20,
-      color: financialMetrics.savingsRate >= 15 ? 'success' as const : 'warning' as const
-    },
-    {
-      title: 'Daily Spending Avg',
-      value: financialMetrics.avgDailySpending,
-      format: 'currency' as const,
-      icon: BarChart3,
-      description: 'Average daily expenses',
-      target: 180
-    },
-    {
-      title: 'Financial Health',
-      value: financialMetrics.financialHealthScore,
-      format: 'number' as const,
-      icon: Target,
-      description: 'Overall financial wellness score',
-      color: financialMetrics.financialHealthScore >= 80 ? 'success' as const : 
-             financialMetrics.financialHealthScore >= 60 ? 'warning' as const : 'error' as const
-    },
-    {
-      title: 'Connected Accounts',
-      value: accounts.length,
-      format: 'number' as const,
-      icon: CreditCard,
-      description: `${activeAccounts.length} active accounts`,
-      color: 'info' as const
-    }
-  ]
+  // Define KPI widgets data based on API data
+  const kpiWidgets = useMemo(() => {
+    if (!kpis) return []
 
-  // Use real account data for balance display
-  const balanceAccounts = accounts
+    return [
+      {
+        title: 'Total Balance',
+        value: kpis.totalBalance || 0,
+        format: 'currency' as const,
+        icon: DollarSign,
+        description: 'Total across all accounts',
+        color: kpis.totalBalance > 0 ? 'success' as const : 'warning' as const
+      },
+      {
+        title: 'Monthly Income',
+        value: kpis.monthlyIncome || 0,
+        format: 'currency' as const,
+        icon: TrendingUp,
+        description: 'Income this month'
+      },
+      {
+        title: 'Monthly Expenses',
+        value: kpis.monthlyExpenses || 0,
+        format: 'currency' as const,
+        icon: TrendingDown,
+        description: 'Expenses this month'
+      },
+      {
+        title: 'Savings Rate',
+        value: kpis.savingsRate || 0,
+        format: 'percentage' as const,
+        icon: PiggyBank,
+        description: 'Percentage of income saved',
+        color: kpis.savingsRate >= 20 ? 'success' as const : 'warning' as const
+      },
+      {
+        title: 'Net Cash Flow',
+        value: (kpis.monthlyIncome || 0) - (kpis.monthlyExpenses || 0),
+        format: 'currency' as const,
+        icon: Activity,
+        description: 'Income minus expenses'
+      },
+      {
+        title: 'Connected Accounts',
+        value: kpis.accountCount || 0,
+        format: 'number' as const,
+        icon: CreditCard,
+        description: 'Active account connections',
+        color: 'info' as const
+      }
+    ]
+  }, [kpis])
 
-  if (accountsLoading) {
+  const isLoading = accountsLoading || summaryLoading || kpisLoading
+
+  if (isLoading && !financialSummary && !kpis) {
     return (
       <DashboardLayout
         title="Dashboard"
@@ -385,6 +196,9 @@ function DashboardPage() {
       </DashboardLayout>
     )
   }
+
+  // Check if we have any data at all
+  const hasNoData = !accounts?.length && !recentTransactions?.length
 
   return (
     <DashboardLayout
@@ -417,16 +231,18 @@ function DashboardPage() {
           </div>
         </div>
 
-        {accountsError && (
-          <div className="p-4 bg-error-50 border-l-4 border-error-400 rounded-md">
+        {/* Error messages */}
+        {(accountsError || summaryError) && (
+          <div className="p-4 bg-red-50 border-l-4 border-red-400 rounded-md">
             <div className="flex">
+              <AlertCircle className="h-5 w-5 text-red-400" />
               <div className="ml-3">
-                <p className="text-sm text-error-700">
-                  <strong>Error loading account data:</strong> {accountsError.message}
+                <p className="text-sm text-red-700">
+                  <strong>Error loading data:</strong> {accountsError?.message || summaryError?.message}
                 </p>
-                <button 
-                  onClick={handleRefresh} 
-                  className="mt-2 text-sm text-error-700 underline hover:text-error-800"
+                <button
+                  onClick={handleRefresh}
+                  className="mt-2 text-sm text-red-700 underline hover:text-red-800"
                 >
                   Try again
                 </button>
@@ -435,111 +251,225 @@ function DashboardPage() {
           </div>
         )}
 
-        {/* Financial Summary Card */}
-        <FinancialSummaryCard
-          data={financialSummaryData}
-          isLoading={accountsLoading || isRefreshing}
-          className="col-span-full"
-        />
+        {/* No Data State */}
+        {hasNoData ? (
+          <Card className="col-span-full">
+            <CardContent className="py-12">
+              <EmptyState
+                icon={Package}
+                title="No Financial Data Yet"
+                description="Connect your first account to start tracking your finances and see insights here."
+                actionText="Connect Account"
+                onAction={() => window.location.href = '/accounts'}
+              />
+            </CardContent>
+          </Card>
+        ) : (
+          <>
+            {/* Financial Summary Card */}
+            {financialSummary ? (
+              <FinancialSummaryCard
+                data={financialSummary}
+                isLoading={summaryLoading || isRefreshing}
+                className="col-span-full"
+              />
+            ) : (
+              <Card>
+                <CardContent className="py-8">
+                  <EmptyState
+                    icon={FileText}
+                    title="No Financial Summary"
+                    description="Financial summary will appear here once you have account data."
+                  />
+                </CardContent>
+              </Card>
+            )}
 
-        {/* KPI Widgets Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-          {kpiWidgets.map((widget, index) => (
-            <KPIWidget
-              key={index}
-              {...widget}
-              isLoading={accountsLoading || isRefreshing}
-              size="md"
-            />
-          ))}
-        </div>
+            {/* KPI Widgets Grid */}
+            {kpiWidgets.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+                {kpiWidgets.map((widget, index) => (
+                  <KPIWidget
+                    key={index}
+                    {...widget}
+                    isLoading={kpisLoading || isRefreshing}
+                    size="md"
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {[1, 2, 3].map((i) => (
+                  <Card key={i} className="animate-pulse">
+                    <CardContent className="h-32" />
+                  </Card>
+                ))}
+              </div>
+            )}
 
-        {/* Account Balance Cards */}
-        <AccountBalanceCards
-          accounts={balanceAccounts}
-          isLoading={accountsLoading || isRefreshing}
-          onAccountClick={(account) => console.log('Account clicked:', account)}
-          onRefresh={handleRefresh}
-        />
+            {/* Account Balance Cards */}
+            {accounts.length > 0 ? (
+              <AccountBalanceCards
+                accounts={accounts}
+                isLoading={accountsLoading || isRefreshing}
+                onAccountClick={(account) => console.log('Account clicked:', account)}
+                onRefresh={handleRefresh}
+              />
+            ) : (
+              <Card>
+                <CardContent className="py-8">
+                  <EmptyState
+                    icon={CreditCard}
+                    title="No Connected Accounts"
+                    description="Connect your bank accounts to see balances here."
+                    actionText="Connect Account"
+                    onAction={() => window.location.href = '/accounts'}
+                  />
+                </CardContent>
+              </Card>
+            )}
 
-        {/* Charts Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <SpendingByCategoryChart
-            data={mockSpendingData}
-            isLoading={accountsLoading || isRefreshing}
-            className="col-span-1"
-          />
-          <TransactionTrendsChart
-            data={mockTrendData}
-            isLoading={accountsLoading || isRefreshing}
-            dateRange={selectedDateRange.label}
-            className="col-span-1"
-          />
-        </div>
+            {/* Charts Section */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {spendingData.length > 0 ? (
+                <SpendingByCategoryChart
+                  data={spendingData}
+                  isLoading={spendingLoading || isRefreshing}
+                  className="col-span-1"
+                />
+              ) : (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Spending by Category</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <EmptyState
+                      icon={BarChart3}
+                      title="No Spending Data"
+                      description="Your spending breakdown will appear here once you have transactions."
+                    />
+                  </CardContent>
+                </Card>
+              )}
 
-        {/* Cash Flow Chart - Full Width */}
-        <CashFlowChart
-          data={mockCashFlowData}
-          isLoading={accountsLoading || isRefreshing}
-          showRunningBalance={true}
-        />
-
-        {/* Bottom Section - Transactions and Alerts */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <RecentTransactionsList
-            transactions={mockTransactions}
-            isLoading={accountsLoading || isRefreshing}
-            className="lg:col-span-2"
-            maxItems={8}
-            showFilters={true}
-            onTransactionClick={(transaction) => console.log('Transaction clicked:', transaction)}
-            onViewAll={() => console.log('View all transactions')}
-          />
-          
-          <AlertsNotificationsPanel
-            alerts={mockAlerts}
-            isLoading={accountsLoading || isRefreshing}
-            className="lg:col-span-1"
-            maxItems={5}
-            onAlertClick={(alert) => console.log('Alert clicked:', alert)}
-            onDismissAlert={(alertId) => console.log('Dismiss alert:', alertId)}
-            onViewAll={() => console.log('View all alerts')}
-          />
-        </div>
-
-        {/* Quick Actions Card */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
-            <CardDescription>
-              Common financial tasks and shortcuts
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <Link href="/transactions" className="flex items-center justify-center space-x-2 rounded-lg border border-neutral-200 p-4 text-center text-sm hover:bg-neutral-50 transition-colors group">
-                <Activity className="h-5 w-5 text-neutral-600 group-hover:text-primary-600" />
-                <span className="font-medium">Sync Transactions</span>
-              </Link>
-              <Link href="/accounts" className="flex items-center justify-center space-x-2 rounded-lg border border-neutral-200 p-4 text-center text-sm hover:bg-neutral-50 transition-colors group">
-                <CreditCard className="h-5 w-5 text-neutral-600 group-hover:text-primary-600" />
-                <span className="font-medium">Connect Account</span>
-              </Link>
-              <Link href="/reports" className="flex items-center justify-center space-x-2 rounded-lg border border-neutral-200 p-4 text-center text-sm hover:bg-neutral-50 transition-colors group">
-                <BarChart3 className="h-5 w-5 text-neutral-600 group-hover:text-primary-600" />
-                <span className="font-medium">Generate Report</span>
-              </Link>
-              <Link href="/budgets" className="flex items-center justify-center space-x-2 rounded-lg border border-neutral-200 p-4 text-center text-sm hover:bg-neutral-50 transition-colors group">
-                <Target className="h-5 w-5 text-neutral-600 group-hover:text-primary-600" />
-                <span className="font-medium">Manage Budgets</span>
-              </Link>
+              {trendsData.length > 0 ? (
+                <TransactionTrendsChart
+                  data={trendsData}
+                  isLoading={trendsLoading || isRefreshing}
+                  dateRange={selectedDateRange.label}
+                  className="col-span-1"
+                />
+              ) : (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Transaction Trends</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <EmptyState
+                      icon={TrendingUpIcon}
+                      title="No Trend Data"
+                      description="Transaction trends will appear here once you have transaction history."
+                    />
+                  </CardContent>
+                </Card>
+              )}
             </div>
-          </CardContent>
-        </Card>
+
+            {/* Cash Flow Chart - Full Width */}
+            {cashFlowData.length > 0 ? (
+              <CashFlowChart
+                data={cashFlowData}
+                isLoading={cashFlowLoading || isRefreshing}
+                showRunningBalance={true}
+              />
+            ) : (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Cash Flow Analysis</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <EmptyState
+                    icon={Activity}
+                    title="No Cash Flow Data"
+                    description="Monthly cash flow analysis will appear here once you have transaction history."
+                  />
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Bottom Section - Transactions and Alerts */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {recentTransactions.length > 0 ? (
+                <RecentTransactionsList
+                  transactions={recentTransactions}
+                  isLoading={transactionsLoading || isRefreshing}
+                  className="lg:col-span-2"
+                  maxItems={8}
+                  showFilters={true}
+                  onTransactionClick={(transaction) => console.log('Transaction clicked:', transaction)}
+                  onViewAll={() => window.location.href = '/transactions'}
+                />
+              ) : (
+                <Card className="lg:col-span-2">
+                  <CardHeader>
+                    <CardTitle>Recent Transactions</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <EmptyState
+                      icon={FileText}
+                      title="No Transactions Yet"
+                      description="Your recent transactions will appear here once you connect an account."
+                    />
+                  </CardContent>
+                </Card>
+              )}
+
+              <AlertsNotificationsPanel
+                alerts={alerts}
+                isLoading={alertsLoading || isRefreshing}
+                className="lg:col-span-1"
+                maxItems={5}
+                onAlertClick={(alert) => console.log('Alert clicked:', alert)}
+                onDismissAlert={(alertId) => console.log('Dismiss alert:', alertId)}
+                onViewAll={() => console.log('View all alerts')}
+              />
+            </div>
+
+            {/* Quick Actions Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Quick Actions</CardTitle>
+                <CardDescription>
+                  Common financial tasks and shortcuts
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <Link href="/transactions" className="flex items-center justify-center space-x-2 rounded-lg border border-neutral-200 p-4 text-center text-sm hover:bg-neutral-50 transition-colors group">
+                    <Activity className="h-5 w-5 text-neutral-600 group-hover:text-primary-600" />
+                    <span className="font-medium">View Transactions</span>
+                  </Link>
+                  <Link href="/accounts" className="flex items-center justify-center space-x-2 rounded-lg border border-neutral-200 p-4 text-center text-sm hover:bg-neutral-50 transition-colors group">
+                    <CreditCard className="h-5 w-5 text-neutral-600 group-hover:text-primary-600" />
+                    <span className="font-medium">Connect Account</span>
+                  </Link>
+                  <Link href="/reports" className="flex items-center justify-center space-x-2 rounded-lg border border-neutral-200 p-4 text-center text-sm hover:bg-neutral-50 transition-colors group">
+                    <BarChart3 className="h-5 w-5 text-neutral-600 group-hover:text-primary-600" />
+                    <span className="font-medium">Generate Report</span>
+                  </Link>
+                  <Link href="/budgets" className="flex items-center justify-center space-x-2 rounded-lg border border-neutral-200 p-4 text-center text-sm hover:bg-neutral-50 transition-colors group">
+                    <Target className="h-5 w-5 text-neutral-600 group-hover:text-primary-600" />
+                    <span className="font-medium">Manage Budgets</span>
+                  </Link>
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        )}
       </div>
     </DashboardLayout>
   )
 }
 
-// Export protected version
-export default withAuth(DashboardPage)
+// Export unprotected version for local development
+export default DashboardPage
