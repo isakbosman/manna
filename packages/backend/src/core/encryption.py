@@ -11,7 +11,7 @@ import logging
 import secrets
 import struct
 from typing import Optional, Union, Any, Tuple
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -22,19 +22,8 @@ from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy import TypeDecorator, String
 from sqlalchemy.engine.interfaces import Dialect
 
-# Try relative import first, fall back to absolute
-try:
-    from ..config import settings
-except ImportError:
-    try:
-        from src.config import settings
-    except ImportError:
-        # For testing, create a mock settings object
-        class MockSettings:
-            environment = "development"
-            secret_key = "development-secret-key-change-in-production"
-
-        settings = MockSettings()
+# Import settings configuration
+from ..config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -199,17 +188,19 @@ class AES256GCMProvider:
             # Convert plaintext to bytes
             plaintext_bytes = plaintext.encode('utf-8')
 
-            # Add timestamp to AAD for replay protection
+            # Create timestamp for replay protection (store it with ciphertext)
+            timestamp = struct.pack('>Q', int(datetime.now(timezone.utc).timestamp()))
+
+            # Use AAD for context binding (without timestamp)
             if aad is None:
-                aad = b""
-            timestamp = struct.pack('>Q', int(datetime.utcnow().timestamp()))
-            aad = aad + timestamp
+                aad = b"manna:field:v2"  # Default context identifier
 
             # Encrypt with AES-256-GCM
             ciphertext = self._aesgcm.encrypt(nonce, plaintext_bytes, aad)
 
-            # Combine version prefix + nonce + ciphertext
-            encrypted_data = EncryptionVersion.AES256_GCM_V2.value + nonce + ciphertext
+            # Combine version prefix + nonce + timestamp + ciphertext
+            # This allows us to extract the same timestamp during decryption
+            encrypted_data = EncryptionVersion.AES256_GCM_V2.value + nonce + timestamp + ciphertext
 
             # Base64 encode for storage
             return base64.urlsafe_b64encode(encrypted_data).decode('utf-8')
@@ -248,16 +239,35 @@ class AES256GCMProvider:
                 # Remove version prefix
                 encrypted_bytes = encrypted_bytes[len(EncryptionVersion.AES256_GCM_V2.value):]
 
-                # Extract nonce (first 12 bytes)
-                nonce = encrypted_bytes[:12]
-                ciphertext_bytes = encrypted_bytes[12:]
+                # Check if we have the new format with timestamp
+                if len(encrypted_bytes) >= 20:  # 12 (nonce) + 8 (timestamp) minimum
+                    # Extract nonce (first 12 bytes)
+                    nonce = encrypted_bytes[:12]
 
-                # Reconstruct AAD with timestamp (ignore timestamp validation for now)
+                    # Try to extract timestamp (next 8 bytes)
+                    try:
+                        stored_timestamp = encrypted_bytes[12:20]
+                        ciphertext_bytes = encrypted_bytes[20:]
+
+                        # Validate timestamp age for replay protection (optional)
+                        timestamp_value = struct.unpack('>Q', stored_timestamp)[0]
+                        current_time = datetime.now(timezone.utc).timestamp()
+
+                        # Allow up to 1 year old data (configurable)
+                        if current_time - timestamp_value > 365 * 24 * 3600:
+                            logger.warning("Decrypting data older than 1 year")
+                    except Exception:
+                        # Fallback for old format without stored timestamp
+                        nonce = encrypted_bytes[:12]
+                        ciphertext_bytes = encrypted_bytes[12:]
+                else:
+                    # Old format without timestamp
+                    nonce = encrypted_bytes[:12]
+                    ciphertext_bytes = encrypted_bytes[12:]
+
+                # Use AAD for context binding (without timestamp)
                 if aad is None:
-                    aad = b""
-                # In production, you'd validate the timestamp here
-                timestamp = struct.pack('>Q', int(datetime.utcnow().timestamp()))
-                aad = aad + timestamp
+                    aad = b"manna:field:v2"  # Default context identifier
 
                 # Decrypt
                 plaintext_bytes = self._aesgcm.decrypt(nonce, ciphertext_bytes, aad)

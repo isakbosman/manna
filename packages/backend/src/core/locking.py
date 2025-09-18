@@ -17,20 +17,11 @@ from sqlalchemy.orm import Session, Mapper
 from sqlalchemy.orm.attributes import instance_state, NO_VALUE
 from sqlalchemy.orm.state import InstanceState
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm.exc import StaleDataError
 import redis
 
-# Try relative import first, fall back to absolute
-try:
-    from ..config import settings
-except ImportError:
-    try:
-        from src.config import settings
-    except ImportError:
-        # For testing, create a mock settings object
-        class MockSettings:
-            redis_url = "redis://localhost:6379/0"
-
-        settings = MockSettings()
+# Import settings configuration
+from ..config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -89,16 +80,13 @@ class OptimisticLockMixin:
             # If we get here, the update was successful
             logger.debug(f"Successfully updated {type(self).__name__} id={self.id} with optimistic lock")
 
-        except SQLAlchemyError as e:
-            # Check if this is a version conflict
-            if "version" in str(e).lower() or "optimistic" in str(e).lower():
-                session.rollback()
-                logger.warning(f"Optimistic lock failed for {type(self).__name__} id={self.id}")
-                raise OptimisticLockError(
-                    f"Record was modified by another process. Current version: {current_version}"
-                ) from e
-            # Re-raise other SQL errors
-            raise
+        except StaleDataError as e:
+            # This is the proper exception for optimistic lock failures in SQLAlchemy 2.x
+            session.rollback()
+            logger.warning(f"Optimistic lock failed for {type(self).__name__} id={self.id}")
+            raise OptimisticLockError(
+                f"Record was modified by another process. Current version: {current_version}"
+            ) from e
 
         except SQLAlchemyError as e:
             session.rollback()
@@ -153,20 +141,31 @@ def setup_optimistic_lock_mappers():
     """
     try:
         # SQLAlchemy 2.x uses a different registry structure
-        from sqlalchemy.orm import registry as orm_registry
+        # Get all configured mappers from the global registry
+        import sqlalchemy.orm
+        if hasattr(sqlalchemy.orm, '_mapper_registry'):
+            registry = sqlalchemy.orm._mapper_registry
+        elif hasattr(sqlalchemy.orm.registry, 'mappers'):
+            registry = sqlalchemy.orm.registry
+        else:
+            # Try to get from any base declarative registry we can find
+            registry = None
 
-        # Get all configured mappers
-        for mapper in Mapper.registry.mappers:
-            if hasattr(mapper, 'class_'):
-                klass = mapper.class_
-                if issubclass(klass, OptimisticLockMixin) and hasattr(klass, 'version'):
-                    # Set version_id_col if not already set
-                    if getattr(mapper, 'version_id_col', None) is None:
-                        mapper.version_id_col = klass.version
-                        logger.debug(f"Configured version_id_col for {klass.__name__}")
+        if registry and hasattr(registry, 'mappers'):
+            for mapper in registry.mappers:
+                if hasattr(mapper, 'class_'):
+                    klass = mapper.class_
+                    if issubclass(klass, OptimisticLockMixin) and hasattr(klass, 'version'):
+                        # Set version_id_col if not already set
+                        if getattr(mapper, 'version_id_col', None) is None:
+                            mapper.version_id_col = klass.version
+                            logger.debug(f"Configured version_id_col for {klass.__name__}")
     except Exception as e:
         # If the registry structure is different, just log and continue
         logger.debug(f"Could not configure optimistic lock mappers: {e}")
+        # For now, disable automatic mapper configuration in SQLAlchemy 2.x
+        # Models should set version_id_col manually if needed
+        pass
 
 
 @event.listens_for(Session, 'after_transaction_end')
