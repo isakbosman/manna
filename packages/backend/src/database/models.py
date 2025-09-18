@@ -234,6 +234,7 @@ class Transaction(Base, TimestampMixin):
     
     # Relationships
     account = relationship("Account", back_populates="transactions")
+    ml_predictions = relationship("MLPrediction", back_populates="transaction", cascade="all, delete-orphan")
     
     # Indexes
     __table_args__ = (
@@ -272,6 +273,49 @@ class Category(Base, TimestampMixin):
     __table_args__ = (
         UniqueConstraint("user_id", "name", name="uq_user_category"),
     )
-    
+
     def __repr__(self):
         return f"<Category(id={self.id}, name={self.name})>"
+
+
+class MLPrediction(Base, TimestampMixin):
+    """Model for storing ML categorization predictions."""
+    __tablename__ = "ml_predictions"
+
+    id = Column(UUID, primary_key=True, default=uuid.uuid4)
+    transaction_id = Column(UUID, ForeignKey("transactions.id", ondelete="CASCADE"), nullable=False)
+    category_id = Column(UUID, ForeignKey("categories.id", ondelete="SET NULL"), nullable=True)
+    confidence = Column(Float, nullable=False)
+    model_version = Column(String, nullable=True)
+    prediction_data = Column(JSON, nullable=True)  # Store additional prediction metadata
+    user_feedback = Column(Boolean, nullable=True)  # True if correct, False if incorrect, None if no feedback
+
+    # Relationships
+    transaction = relationship("Transaction", back_populates="ml_predictions")
+    category = relationship("Category")
+
+    def __repr__(self):
+        return f"<MLPrediction(id={self.id}, transaction_id={self.transaction_id}, confidence={self.confidence})>"
+
+
+class CategorizationRule(Base, TimestampMixin):
+    """Model for storing categorization rules."""
+    __tablename__ = "categorization_rules"
+
+    id = Column(UUID, primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    category_id = Column(UUID, ForeignKey("categories.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String, nullable=False)
+    rule_type = Column(String, nullable=False)  # keyword, regex, amount, compound
+    pattern = Column(String, nullable=False)
+    priority = Column(Integer, default=0)
+    is_active = Column(Boolean, default=True)
+    conditions = Column(JSON, nullable=True)  # Store complex rule conditions
+    statistics = Column(JSON, nullable=True)  # Track rule performance
+
+    # Relationships
+    user = relationship("User")
+    category = relationship("Category")
+
+    def __repr__(self):
+        return f"<CategorizationRule(id={self.id}, name={self.name}, rule_type={self.rule_type})>"

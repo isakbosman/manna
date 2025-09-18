@@ -1,17 +1,18 @@
 """
-Machine Learning router for transaction categorization and model management.
+Enhanced Machine Learning router for transaction categorization and model management.
+Supports advanced ML models, rule-based categorization, and comprehensive analytics.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Body
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_, func
+from sqlalchemy import and_, or_, func, desc
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta, date
 from uuid import UUID
 import logging
 
 from ..database import get_db
-from ..database.models import Transaction, Account, Category
+from ..database.models import Transaction, Account, Category, MLPrediction, CategorizationRule
 from ..schemas.transaction import TransactionCategorization
 from ..schemas.ml import (
     MLTrainingRequest,
@@ -25,6 +26,7 @@ from ..schemas.ml import (
 from ..dependencies.auth import get_current_verified_user
 from ..database.models import User
 from ..services.ml_categorization import ml_service
+from ..services.category_rules import category_rules_service
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -452,3 +454,438 @@ async def trigger_retraining(
         "training_samples": len(transactions),
         "estimated_time": "2-5 minutes"
     }
+
+
+# Enhanced endpoints for advanced ML functionality
+
+@router.post("/train/enhanced")
+async def train_enhanced_model(
+    use_ensemble: bool = Query(True, description="Use ensemble of multiple models"),
+    min_samples: int = Query(100, description="Minimum samples required"),
+    test_size: float = Query(0.2, ge=0.1, le=0.5, description="Test set proportion"),
+    background_tasks: BackgroundTasks = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_verified_user)
+):
+    """
+    Train enhanced ML model with ensemble methods and advanced feature engineering.
+    """
+    try:
+        # Use the enhanced training method
+        result = ml_service.train_enhanced_model(
+            db=db,
+            user_id=str(current_user.id),
+            test_size=test_size,
+            min_samples=min_samples,
+            use_ensemble=use_ensemble
+        )
+
+        if not result["success"]:
+            raise HTTPException(status_code=400, detail=result.get("error", "Training failed"))
+
+        return {
+            "success": True,
+            "model_type": result.get("model_type", "ensemble"),
+            "test_accuracy": result.get("test_accuracy", 0),
+            "cv_mean_accuracy": result.get("cv_mean_accuracy", 0),
+            "cv_std_accuracy": result.get("cv_std_accuracy", 0),
+            "training_samples": result.get("training_samples", 0),
+            "test_samples": result.get("test_samples", 0),
+            "feature_count": result.get("feature_count", 0),
+            "categories": result.get("categories", []),
+            "message": "Enhanced model training completed successfully"
+        }
+
+    except Exception as e:
+        logger.error(f"Enhanced model training failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Training failed: {str(e)}")
+
+
+@router.get("/predictions/history")
+async def get_prediction_history(
+    limit: int = Query(100, le=1000, description="Maximum number of predictions to return"),
+    offset: int = Query(0, ge=0, description="Number of predictions to skip"),
+    include_feedback: bool = Query(True, description="Include user feedback information"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_verified_user)
+):
+    """
+    Get history of ML predictions for user's transactions.
+    """
+    # Query ML predictions for user's transactions
+    query = db.query(MLPrediction).join(Transaction).join(Account).filter(
+        Account.user_id == current_user.id
+    ).order_by(desc(MLPrediction.prediction_date))
+
+    if not include_feedback:
+        # Only predictions without user feedback
+        query = query.filter(MLPrediction.user_feedback.is_(None))
+
+    predictions = query.offset(offset).limit(limit).all()
+    total_count = query.count()
+
+    # Format response
+    prediction_data = []
+    for pred in predictions:
+        prediction_data.append({
+            "id": str(pred.id),
+            "transaction_id": str(pred.transaction_id),
+            "category_id": str(pred.category_id) if pred.category_id else None,
+            "model_version": pred.model_version,
+            "model_type": pred.model_type,
+            "confidence": float(pred.confidence),
+            "probability": float(pred.probability),
+            "prediction_date": pred.prediction_date,
+            "is_accepted": pred.is_accepted,
+            "user_feedback": pred.user_feedback,
+            "feedback_date": pred.feedback_date,
+            "alternative_predictions": pred.alternative_predictions,
+            "features_used": pred.features_used,
+            "confidence_level": pred.confidence_level
+        })
+
+    return {
+        "predictions": prediction_data,
+        "total_count": total_count,
+        "limit": limit,
+        "offset": offset
+    }
+
+
+@router.get("/analytics/performance")
+async def get_ml_performance_analytics(
+    days_back: int = Query(30, ge=1, le=365, description="Days of data to analyze"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_verified_user)
+):
+    """
+    Get comprehensive ML performance analytics.
+    """
+    start_date = datetime.utcnow() - timedelta(days=days_back)
+
+    # Get predictions with feedback
+    predictions_query = db.query(MLPrediction).join(Transaction).join(Account).filter(
+        Account.user_id == current_user.id,
+        MLPrediction.prediction_date >= start_date,
+        MLPrediction.user_feedback.isnot(None)
+    )
+
+    predictions_with_feedback = predictions_query.all()
+
+    if not predictions_with_feedback:
+        return {
+            "period_days": days_back,
+            "total_predictions": 0,
+            "accuracy": None,
+            "confidence_distribution": {},
+            "category_performance": {},
+            "model_performance": {},
+            "feedback_trends": []
+        }
+
+    # Calculate overall accuracy
+    correct_predictions = sum(1 for p in predictions_with_feedback if p.is_accepted)
+    accuracy = correct_predictions / len(predictions_with_feedback)
+
+    # Confidence distribution
+    confidence_bins = [0.0, 0.5, 0.7, 0.8, 0.9, 1.0]
+    confidence_dist = {f"{confidence_bins[i]}-{confidence_bins[i+1]}": 0 for i in range(len(confidence_bins)-1)}
+
+    for pred in predictions_with_feedback:
+        conf = float(pred.confidence)
+        for i in range(len(confidence_bins)-1):
+            if confidence_bins[i] <= conf < confidence_bins[i+1]:
+                confidence_dist[f"{confidence_bins[i]}-{confidence_bins[i+1]}"] += 1
+                break
+
+    # Category performance
+    category_performance = {}
+    for pred in predictions_with_feedback:
+        if pred.category and pred.category.name:
+            cat_name = pred.category.name
+            if cat_name not in category_performance:
+                category_performance[cat_name] = {"total": 0, "correct": 0, "accuracy": 0}
+
+            category_performance[cat_name]["total"] += 1
+            if pred.is_accepted:
+                category_performance[cat_name]["correct"] += 1
+
+    # Calculate category accuracies
+    for cat_data in category_performance.values():
+        if cat_data["total"] > 0:
+            cat_data["accuracy"] = cat_data["correct"] / cat_data["total"]
+
+    # Model performance by version
+    model_performance = {}
+    for pred in predictions_with_feedback:
+        model_key = f"{pred.model_type}_{pred.model_version}"
+        if model_key not in model_performance:
+            model_performance[model_key] = {"total": 0, "correct": 0, "accuracy": 0}
+
+        model_performance[model_key]["total"] += 1
+        if pred.is_accepted:
+            model_performance[model_key]["correct"] += 1
+
+    # Calculate model accuracies
+    for model_data in model_performance.values():
+        if model_data["total"] > 0:
+            model_data["accuracy"] = model_data["correct"] / model_data["total"]
+
+    return {
+        "period_days": days_back,
+        "total_predictions": len(predictions_with_feedback),
+        "accuracy": accuracy,
+        "confidence_distribution": confidence_dist,
+        "category_performance": category_performance,
+        "model_performance": model_performance,
+        "high_confidence_accuracy": sum(1 for p in predictions_with_feedback if p.is_accepted and p.confidence >= 0.8) / max(1, sum(1 for p in predictions_with_feedback if p.confidence >= 0.8)),
+        "avg_confidence": sum(float(p.confidence) for p in predictions_with_feedback) / len(predictions_with_feedback)
+    }
+
+
+@router.post("/rules/create")
+async def create_categorization_rule(
+    rule_data: Dict[str, Any] = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_verified_user)
+):
+    """
+    Create a new categorization rule for the user.
+    """
+    try:
+        # Validate required fields
+        required_fields = ["name", "rule_type", "pattern", "category_name"]
+        for field in required_fields:
+            if field not in rule_data:
+                raise HTTPException(status_code=400, detail=f"Missing required field: {field}")
+
+        # Create the rule
+        rule = category_rules_service.create_user_rule(
+            db=db,
+            user_id=str(current_user.id),
+            rule_data=rule_data
+        )
+
+        return {
+            "success": True,
+            "rule_id": str(rule.id),
+            "message": f"Rule '{rule.name}' created successfully"
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to create rule: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to create rule: {str(e)}")
+
+
+@router.get("/rules/stats")
+async def get_rule_statistics(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_verified_user)
+):
+    """
+    Get statistics about user's categorization rules.
+    """
+    try:
+        stats = category_rules_service.get_rule_statistics(
+            db=db,
+            user_id=str(current_user.id)
+        )
+        return stats
+
+    except Exception as e:
+        logger.error(f"Failed to get rule statistics: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve rule statistics")
+
+
+@router.post("/categorize/with-rules")
+async def categorize_transaction_with_rules(
+    transaction_id: UUID,
+    apply_ml_if_no_rule_match: bool = Query(True, description="Apply ML if no rules match"),
+    min_rule_confidence: float = Query(0.7, ge=0, le=1, description="Minimum rule confidence"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_verified_user)
+):
+    """
+    Categorize transaction using rules first, then ML as fallback.
+    """
+    # Get transaction
+    transaction = db.query(Transaction).join(Account).filter(
+        Transaction.id == transaction_id,
+        Account.user_id == current_user.id
+    ).first()
+
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    # Apply rules first
+    rule_match = category_rules_service.get_best_rule_match(
+        transaction=transaction,
+        db=db,
+        user_id=str(current_user.id)
+    )
+
+    if rule_match and rule_match.confidence >= min_rule_confidence:
+        # Use rule-based categorization
+        result = TransactionCategorization(
+            transaction_id=transaction.id,
+            suggested_category=rule_match.category_name,
+            confidence=rule_match.confidence,
+            alternative_categories=None,
+            rules_applied=[f"Rule: {rule_match.rule_name}"]
+        )
+
+        # Store the prediction
+        ml_service.store_prediction_feedback(
+            db=db,
+            transaction_id=str(transaction.id),
+            predicted_category=rule_match.category_name,
+            actual_category=rule_match.category_name,
+            user_confidence=rule_match.confidence
+        )
+
+    elif apply_ml_if_no_rule_match:
+        # Fall back to ML categorization
+        result = ml_service.categorize_transaction(
+            transaction,
+            use_ml=True,
+            use_rules=False  # We already tried rules
+        )
+        result.rules_applied = ["ML fallback (no rule match)"]
+
+    else:
+        # No categorization available
+        result = TransactionCategorization(
+            transaction_id=transaction.id,
+            suggested_category="Uncategorized",
+            confidence=0.0,
+            alternative_categories=None,
+            rules_applied=["No applicable rules found"]
+        )
+
+    return result
+
+
+@router.post("/feedback/batch")
+async def provide_batch_feedback(
+    feedback_items: List[Dict[str, Any]] = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_verified_user)
+):
+    """
+    Provide feedback on multiple categorizations at once.
+    """
+    try:
+        feedback_results = []
+
+        for item in feedback_items:
+            transaction_id = item.get("transaction_id")
+            correct_category = item.get("correct_category")
+            was_correct = item.get("was_correct", False)
+
+            if not transaction_id or not correct_category:
+                continue
+
+            # Verify transaction belongs to user
+            transaction = db.query(Transaction).join(Account).filter(
+                Transaction.id == transaction_id,
+                Account.user_id == current_user.id
+            ).first()
+
+            if transaction:
+                # Update transaction
+                transaction.user_category_override = correct_category
+                transaction.updated_at = datetime.utcnow()
+
+                # Record feedback
+                feedback_result = ml_service.update_from_feedback(
+                    transaction_id=str(transaction_id),
+                    correct_category=correct_category,
+                    was_correct=was_correct
+                )
+
+                feedback_results.append({
+                    "transaction_id": str(transaction_id),
+                    "success": True,
+                    "retrain_triggered": feedback_result.get("retrain_triggered", False)
+                })
+            else:
+                feedback_results.append({
+                    "transaction_id": str(transaction_id),
+                    "success": False,
+                    "error": "Transaction not found or unauthorized"
+                })
+
+        db.commit()
+
+        # Check if any triggered retraining
+        retrain_triggered = any(r.get("retrain_triggered", False) for r in feedback_results)
+
+        return {
+            "success": True,
+            "processed_count": len(feedback_results),
+            "successful_feedback": sum(1 for r in feedback_results if r["success"]),
+            "retrain_triggered": retrain_triggered,
+            "results": feedback_results
+        }
+
+    except Exception as e:
+        logger.error(f"Batch feedback failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Batch feedback failed: {str(e)}")
+
+
+@router.get("/model/feature-importance")
+async def get_model_feature_importance(
+    top_n: int = Query(20, ge=5, le=100, description="Number of top features to return"),
+    current_user: User = Depends(get_current_verified_user)
+):
+    """
+    Get the most important features from the trained model.
+    """
+    try:
+        # Get model metrics which includes feature information
+        metrics = ml_service.get_model_metrics()
+
+        if not metrics.get("model_loaded"):
+            raise HTTPException(status_code=404, detail="No trained model found")
+
+        # Try to extract feature importance from the model
+        feature_importance = []
+
+        if ml_service.text_vectorizer and ml_service.ensemble_classifier:
+            try:
+                # Get feature names from vectorizer
+                feature_names = ml_service.text_vectorizer.get_feature_names_out()
+
+                # For ensemble, we'll try to get feature importance from random forest component
+                if hasattr(ml_service.ensemble_classifier, 'estimators_'):
+                    for name, estimator in ml_service.ensemble_classifier.estimators_:
+                        if hasattr(estimator, 'feature_importances_'):
+                            importances = estimator.feature_importances_
+                            # Get top features
+                            top_indices = importances.argsort()[-top_n:][::-1]
+                            for idx in top_indices:
+                                feature_importance.append({
+                                    "feature": feature_names[idx],
+                                    "importance": float(importances[idx]),
+                                    "model_component": name
+                                })
+                            break
+
+                # Sort by importance
+                feature_importance.sort(key=lambda x: x["importance"], reverse=True)
+                feature_importance = feature_importance[:top_n]
+
+            except Exception as e:
+                logger.warning(f"Could not extract feature importance: {e}")
+
+        return {
+            "model_loaded": metrics.get("model_loaded"),
+            "model_version": metrics.get("model_version", "unknown"),
+            "feature_count": metrics.get("feature_count", 0),
+            "top_features": feature_importance,
+            "note": "Feature importance may not be available for all model types"
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to get feature importance: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve feature importance")

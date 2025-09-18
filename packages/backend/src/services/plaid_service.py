@@ -170,8 +170,8 @@ class PlaidService:
                     "account_id": account['account_id'],
                     "name": account['name'],
                     "official_name": account.get('official_name'),
-                    "type": account['type'],
-                    "subtype": account['subtype'],
+                    "type": str(account['type']) if not isinstance(account['type'], str) else account['type'],
+                    "subtype": str(account['subtype']) if not isinstance(account['subtype'], str) else account['subtype'],
                     "mask": account.get('mask'),
                     "current_balance": account['balances']['current'],
                     "available_balance": account['balances'].get('available'),
@@ -284,10 +284,12 @@ class PlaidService:
             Dict containing added/modified/removed transactions and new cursor
         """
         try:
-            request = TransactionsSyncRequest(
-                access_token=access_token,
-                cursor=cursor if cursor else None
-            )
+            # Build request parameters - cursor is optional
+            request_params = {"access_token": access_token}
+            if cursor:
+                request_params["cursor"] = cursor
+
+            request = TransactionsSyncRequest(**request_params)
             
             response = self.client.transactions_sync(request)
             
@@ -331,8 +333,8 @@ class PlaidService:
                 "institution_id": item.get('institution_id'),
                 "webhook": item.get('webhook'),
                 "error": item.get('error'),
-                "available_products": item['available_products'],
-                "billed_products": item['billed_products'],
+                "available_products": [str(p) if not isinstance(p, str) else p for p in item['available_products']],
+                "billed_products": [str(p) if not isinstance(p, str) else p for p in item['billed_products']],
                 "consent_expiration_time": item.get('consent_expiration_time'),
                 "update_type": item.get('update_type'),
             }

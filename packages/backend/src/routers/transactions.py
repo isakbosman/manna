@@ -141,10 +141,8 @@ async def list_transactions(
         items=transactions,
         total=total_items,
         page=page,
-        page_size=page_size,
-        total_pages=total_pages,
-        has_next=page < total_pages,
-        has_previous=page > 1
+        per_page=page_size,
+        pages=total_pages
     )
 
 

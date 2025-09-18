@@ -2,7 +2,7 @@
 
 from sqlalchemy import (
     Column, String, Boolean, Numeric, DateTime, Text, ForeignKey, Index,
-    CheckConstraint, func, event
+    CheckConstraint, Integer, func, event
 )
 from sqlalchemy.orm import relationship, Session
 from sqlalchemy.dialects.postgresql import UUID, JSONB

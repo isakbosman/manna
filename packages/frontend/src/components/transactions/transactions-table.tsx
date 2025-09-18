@@ -16,8 +16,10 @@ import {
 import { DataTable } from '../ui/data-table'
 import { Button } from '../ui/button'
 import { Badge } from '../ui/badge'
-import { CustomSelect } from '../ui/select'
-import { Transaction, Account, Category, transactionsApi, categoriesApi } from '@/lib/api'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
+import { Transaction, Account, Category } from '@/lib/api'
+import { transactionsApi } from '@/lib/api/transactions'
+import { categoriesApi } from '@/lib/api/categories'
 import { cn } from '../../lib/utils'
 import { format } from 'date-fns'
 
@@ -163,19 +165,22 @@ export function TransactionsTable({
         
         return (
           <div className="flex items-center gap-2">
-            <CustomSelect
-              options={[
-                { value: '', label: 'Select category' },
-                ...categories.map(cat => ({
-                  value: cat.name,
-                  label: cat.name,
-                  icon: <span className="text-xs">{cat.type}</span>
-                }))
-              ]}
-              value=""
-              onChange={(value) => value && handleQuickCategorize(transaction, value)}
-              placeholder="Uncategorized"
-            />
+            <Select value="" onValueChange={(value) => value && handleQuickCategorize(transaction, value)}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Uncategorized" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Select category</SelectItem>
+                {categories.map(cat => (
+                  <SelectItem key={cat.name} value={cat.name}>
+                    <span className="flex items-center gap-2">
+                      <span className="text-xs">{cat.type}</span>
+                      {cat.name}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             
             <Button
               variant="ghost"

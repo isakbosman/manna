@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     
     # Database Settings
     database_url: str = Field(
-        default="postgresql://manna:manna@localhost:5432/manna_dev",
+        default="postgresql://postgres@localhost:5432/manna",
         env="DATABASE_URL"
     )
     database_echo: bool = Field(default=False, env="DATABASE_ECHO")
@@ -79,7 +79,7 @@ class Settings(BaseSettings):
     
     # ML Settings
     ml_model_path: str = Field(
-        default="/app/models/categorization",
+        default="./models/categorization",
         env="ML_MODEL_PATH"
     )
     ml_confidence_threshold: float = Field(default=0.75, env="ML_CONFIDENCE_THRESHOLD")
@@ -121,9 +121,10 @@ class Settings(BaseSettings):
     
     class Config:
         """Pydantic config."""
-        env_file = ".env"
+        env_file = ["../../.env", ".env"]  # Check parent directory first, then current
         env_file_encoding = "utf-8"
         case_sensitive = False
+        extra = "ignore"  # Ignore extra fields from .env file
         
         # Allow parsing of complex types from environment
         @classmethod

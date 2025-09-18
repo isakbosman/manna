@@ -307,7 +307,7 @@ function AccountsPage() {
 
   const handleSyncAllAccounts = async () => {
     try {
-      const result = await syncMutation.mutateAsync()
+      const result = await syncMutation.mutateAsync(undefined)
       successToast(
         'All Accounts Synced',
         `Updated ${result.synced_count} accounts with ${result.new_transactions} new transactions`

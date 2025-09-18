@@ -20,7 +20,7 @@ export function TestPlaid() {
     const timer = setTimeout(checkPlaid, 3000)
 
     // Try to fetch link token
-    fetch('http://localhost:8000/api/v1/plaid/create-link-token', {
+    fetch('http://localhost:8001/api/v1/plaid/create-link-token', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'

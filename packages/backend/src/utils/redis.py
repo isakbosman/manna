@@ -1,8 +1,10 @@
 """
 Redis connection and utility functions.
+Supports both async and sync Redis clients for different use cases.
 """
 
-import redis.asyncio as redis
+import redis.asyncio as redis_async
+import redis as redis_sync
 from typing import Optional
 import logging
 import json
@@ -11,22 +13,23 @@ from ..config import settings
 
 logger = logging.getLogger(__name__)
 
-# Global Redis client instance
-_redis_client: Optional[redis.Redis] = None
+# Global Redis client instances
+_redis_client_async: Optional[redis_async.Redis] = None
+_redis_client_sync: Optional[redis_sync.Redis] = None
 
 
-async def get_redis_client() -> Optional[redis.Redis]:
+async def get_redis_client() -> Optional[redis_async.Redis]:
     """
-    Get or create Redis client instance.
-    
+    Get or create async Redis client instance.
+
     Returns:
-        Redis client instance or None if connection fails
+        Async Redis client instance or None if connection fails
     """
-    global _redis_client
-    
-    if _redis_client is None:
+    global _redis_client_async
+
+    if _redis_client_async is None:
         try:
-            _redis_client = redis.from_url(
+            _redis_client_async = redis_async.from_url(
                 settings.redis_url,
                 encoding="utf-8",
                 decode_responses=True,
@@ -34,13 +37,41 @@ async def get_redis_client() -> Optional[redis.Redis]:
                 socket_timeout=5,
             )
             # Test connection
-            await _redis_client.ping()
-            logger.info("Redis client initialized successfully")
+            await _redis_client_async.ping()
+            logger.info("Async Redis client initialized successfully")
         except Exception as e:
-            logger.error(f"Failed to initialize Redis client: {e}")
-            _redis_client = None
-    
-    return _redis_client
+            logger.error(f"Failed to initialize async Redis client: {e}")
+            _redis_client_async = None
+
+    return _redis_client_async
+
+
+def get_redis_client_sync() -> Optional[redis_sync.Redis]:
+    """
+    Get or create sync Redis client instance for ML services.
+
+    Returns:
+        Sync Redis client instance or None if connection fails
+    """
+    global _redis_client_sync
+
+    if _redis_client_sync is None:
+        try:
+            _redis_client_sync = redis_sync.from_url(
+                settings.redis_url,
+                encoding="utf-8",
+                decode_responses=True,
+                socket_connect_timeout=5,
+                socket_timeout=5,
+            )
+            # Test connection
+            _redis_client_sync.ping()
+            logger.info("Sync Redis client initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize sync Redis client: {e}")
+            _redis_client_sync = None
+
+    return _redis_client_sync
 
 
 async def check_redis_connection() -> bool:

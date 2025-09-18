@@ -25,7 +25,7 @@ import {
   SparklesIcon,
   SearchIcon
 } from 'lucide-react'
-import { CustomSelect, CustomSelectOption } from '../ui/select'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
 import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -182,7 +182,7 @@ export function CategoryPicker({
     return prediction?.confidence || 0
   }
 
-  const categoryOptions: CustomSelectOption[] = sortedCategories.map(category => ({
+  const categoryOptions = sortedCategories.map(category => ({
     value: category.id,
     label: category.name,
     icon: (
@@ -391,15 +391,31 @@ function CreateCategoryModal({
           <label className="block text-sm font-medium text-neutral-700 mb-1">
             Type
           </label>
-          <CustomSelect
-            options={[
-              { value: 'income', label: 'Income', icon: <TrendingUpIcon className="h-4 w-4" /> },
-              { value: 'expense', label: 'Expense', icon: <DollarSignIcon className="h-4 w-4" /> },
-              { value: 'transfer', label: 'Transfer', icon: <CreditCardIcon className="h-4 w-4" /> },
-            ]}
-            value={type}
-            onChange={(value) => setType(value as any)}
-          />
+          <Select value={type} onValueChange={(value) => setType(value as any)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="income">
+                <div className="flex items-center gap-2">
+                  <TrendingUpIcon className="h-4 w-4" />
+                  Income
+                </div>
+              </SelectItem>
+              <SelectItem value="expense">
+                <div className="flex items-center gap-2">
+                  <DollarSignIcon className="h-4 w-4" />
+                  Expense
+                </div>
+              </SelectItem>
+              <SelectItem value="transfer">
+                <div className="flex items-center gap-2">
+                  <CreditCardIcon className="h-4 w-4" />
+                  Transfer
+                </div>
+              </SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="flex justify-end gap-2">

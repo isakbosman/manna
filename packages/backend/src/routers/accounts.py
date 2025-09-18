@@ -98,7 +98,7 @@ async def list_accounts(
                 created_at=account.created_at,
                 updated_at=account.updated_at,
                 institution_name=institution.name if institution else None,
-                institution_logo=institution.logo if institution else None,
+                institution_logo=institution.logo_url if institution else None,
                 institution_color=institution.primary_color if institution else None,
             )
             account_list.append(account_data)

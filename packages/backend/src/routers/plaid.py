@@ -165,9 +165,9 @@ async def exchange_public_token(
                 # Update existing account
                 account.name = account_data["name"]
                 account.official_name = account_data.get("official_name")
-                account.current_balance = account_data["current_balance"]
-                account.available_balance = account_data.get("available_balance")
-                account.limit = account_data.get("limit")
+                account.current_balance_cents = int(account_data["current_balance"] * 100)
+                account.available_balance_cents = int(account_data["available_balance"] * 100) if account_data.get("available_balance") is not None else None
+                account.limit_cents = int(account_data["limit"] * 100) if account_data.get("limit") is not None else None
                 account.iso_currency_code = account_data["iso_currency_code"]
                 account.is_active = True
             else:
@@ -181,9 +181,9 @@ async def exchange_public_token(
                     type=account_data["type"],
                     subtype=account_data["subtype"],
                     mask=account_data.get("mask"),
-                    current_balance=account_data["current_balance"],
-                    available_balance=account_data.get("available_balance"),
-                    limit=account_data.get("limit"),
+                    current_balance_cents=int(account_data["current_balance"] * 100),
+                    available_balance_cents=int(account_data["available_balance"] * 100) if account_data.get("available_balance") is not None else None,
+                    limit_cents=int(account_data["limit"] * 100) if account_data.get("limit") is not None else None,
                     iso_currency_code=account_data["iso_currency_code"],
                     is_active=True
                 )
@@ -194,7 +194,28 @@ async def exchange_public_token(
         
         # Commit all changes
         db.commit()
-        
+
+        # Refresh accounts to get full data
+        db.refresh(plaid_item)
+
+        # Get all accounts for this plaid_item to return to frontend
+        linked_accounts = db.query(Account).filter(
+            Account.plaid_item_id == plaid_item.id
+        ).all()
+
+        accounts_response = []
+        for acc in linked_accounts:
+            accounts_response.append({
+                "id": str(acc.id),
+                "name": acc.name,
+                "type": acc.type,
+                "subtype": acc.subtype,
+                "mask": acc.mask,
+                "current_balance": acc.current_balance_cents / 100 if acc.current_balance_cents else 0,
+                "available_balance": acc.available_balance_cents / 100 if acc.available_balance_cents else None,
+                "iso_currency_code": acc.iso_currency_code
+            })
+
         # Initiate transaction fetch in background
         background_tasks.add_task(
             fetch_initial_transactions,
@@ -202,14 +223,15 @@ async def exchange_public_token(
             access_token,
             current_user.id
         )
-        
+
         logger.info(f"Successfully linked accounts for user {current_user.id}")
-        
+
         return {
             "message": "Bank account successfully linked",
             "item_id": str(plaid_item.id),
-            "institution": institution.name if institution else None,
-            "accounts_connected": len(account_ids),
+            "institution_name": institution.name if institution else "Unknown",
+            "accounts_connected": len(accounts_response),
+            "accounts": accounts_response,
             "account_ids": account_ids
         }
         
@@ -324,6 +346,170 @@ async def remove_linked_item(
             detail="Failed to unlink bank account"
         )
 
+
+from pydantic import BaseModel
+
+class SyncTransactionsRequest(BaseModel):
+    account_ids: Optional[List[str]] = None
+
+@router.post("/sync-transactions")
+async def sync_all_transactions(
+    request: SyncTransactionsRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Sync transactions for user's accounts.
+    If account_ids provided, sync only those accounts.
+    Otherwise sync all active accounts.
+    """
+    logger.info(f"🚀 DEBUG: sync_all_transactions called for user: {current_user.id if current_user else 'NO USER'}")
+    try:
+        # Get plaid items to sync
+        query = db.query(PlaidItem).filter(
+            PlaidItem.user_id == current_user.id,
+            PlaidItem.is_active == True
+        )
+
+        if request.account_ids:
+            # Get plaid items for specific accounts
+            query = query.join(Account).filter(Account.id.in_(request.account_ids))
+
+        plaid_items = query.all()
+
+        logger.info(f"Found {len(plaid_items)} plaid items for user {current_user.id}")
+
+        if not plaid_items:
+            logger.warning(f"No active Plaid items found for user {current_user.id}")
+            return {
+                "synced_count": 0,
+                "new_transactions": 0,
+                "message": "No active accounts to sync"
+            }
+
+        total_synced = 0
+        total_new = 0
+
+        for plaid_item in plaid_items:
+            try:
+                logger.info(f"Processing Plaid item {plaid_item.id}, cursor: {plaid_item.cursor}")
+
+                # Always use sync - it handles both initial and incremental syncs
+                # When cursor is None, it fetches ALL historical transactions
+                has_more = True
+                current_cursor = plaid_item.cursor
+
+                logger.info(f"Starting sync with cursor: {current_cursor}")
+
+                while has_more:
+                    logger.info(f"Calling Plaid sync API with cursor: {current_cursor}")
+                    sync_result = await plaid_service.sync_transactions(
+                        plaid_item.access_token,
+                        current_cursor
+                    )
+
+                    logger.info(f"Plaid sync response: added={len(sync_result.get('added', []))}, "
+                              f"modified={len(sync_result.get('modified', []))}, "
+                              f"removed={len(sync_result.get('removed', []))}, "
+                              f"has_more={sync_result.get('has_more', False)}")
+
+                    # Process added transactions
+                    for txn_data in sync_result.get("added", []):
+                        # Get account
+                        account = db.query(Account).filter(
+                            Account.plaid_account_id == txn_data["account_id"]
+                        ).first()
+
+                        if account:
+                            # Check if transaction already exists
+                            existing = db.query(Transaction).filter(
+                                Transaction.plaid_transaction_id == txn_data["transaction_id"]
+                            ).first()
+
+                            if not existing:
+                                transaction = Transaction(
+                                    account_id=account.id,
+                                    plaid_transaction_id=txn_data["transaction_id"],
+                                    amount_cents=int(txn_data["amount"] * 100),  # Convert to cents
+                                    iso_currency_code=txn_data.get("iso_currency_code", "USD"),
+                                    date=datetime.strptime(txn_data["date"], "%Y-%m-%d").date() if isinstance(txn_data["date"], str) else txn_data["date"],
+                                    name=txn_data["name"],
+                                    merchant_name=txn_data.get("merchant_name"),
+                                    category=txn_data.get("category", []),
+                                    category_id=txn_data.get("category_id"),
+                                    primary_category=txn_data.get("category", [""])[0] if txn_data.get("category") else None,
+                                    detailed_category=txn_data.get("category", ["", ""])[-1] if txn_data.get("category") and len(txn_data.get("category")) > 1 else None,
+                                    pending=txn_data["pending"],
+                                    pending_transaction_id=txn_data.get("pending_transaction_id"),
+                                    payment_channel=txn_data.get("payment_channel"),
+                                    location=dict(txn_data["location"]) if txn_data.get("location") else None,
+                                    account_owner=txn_data.get("account_owner"),
+                                    authorized_date=datetime.strptime(txn_data.get("authorized_date"), "%Y-%m-%d").date() if txn_data.get("authorized_date") and isinstance(txn_data.get("authorized_date"), str) else txn_data.get("authorized_date")
+                                )
+                                db.add(transaction)
+                                total_new += 1
+
+                    # Process modified transactions
+                    for txn_data in sync_result.get("modified", []):
+                        transaction = db.query(Transaction).filter(
+                            Transaction.plaid_transaction_id == txn_data["transaction_id"]
+                        ).first()
+
+                        if transaction:
+                            transaction.amount_cents = int(txn_data["amount"] * 100)
+                            transaction.date = datetime.strptime(txn_data["date"], "%Y-%m-%d").date() if isinstance(txn_data["date"], str) else txn_data["date"]
+                            transaction.name = txn_data["name"]
+                            transaction.merchant_name = txn_data.get("merchant_name")
+                            transaction.category = txn_data.get("category", [])
+                            transaction.category_id = txn_data.get("category_id")
+                            transaction.primary_category = txn_data.get("category", [""])[0] if txn_data.get("category") else None
+                            transaction.detailed_category = txn_data.get("category", ["", ""])[-1] if txn_data.get("category") and len(txn_data.get("category")) > 1 else None
+                            transaction.pending = txn_data["pending"]
+                            transaction.location = dict(txn_data["location"]) if txn_data.get("location") else None
+
+                    # Process removed transactions
+                    for removed_txn in sync_result.get("removed", []):
+                        transaction = db.query(Transaction).filter(
+                            Transaction.plaid_transaction_id == removed_txn["transaction_id"]
+                        ).first()
+
+                        if transaction:
+                            db.delete(transaction)
+
+                    added = len(sync_result.get("added", []))
+                    modified = len(sync_result.get("modified", []))
+
+                    total_synced += added + modified
+
+                    # Update cursor for next iteration
+                    current_cursor = sync_result.get("next_cursor")
+                    has_more = sync_result.get("has_more", False)
+
+                # Save the final cursor after processing all pages
+                plaid_item.cursor = current_cursor
+                plaid_item.last_successful_sync = datetime.utcnow()
+
+            except Exception as e:
+                logger.error(f"Failed to sync transactions for item {plaid_item.id}: {e}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                plaid_item.last_failed_sync = datetime.utcnow()
+                plaid_item.error = str(e)
+
+        db.commit()
+
+        return {
+            "synced_count": total_synced,
+            "new_transactions": total_new,
+            "message": f"Successfully synced {total_synced} transactions"
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to sync transactions: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to sync transactions: {str(e)}"
+        )
 
 @router.post("/transactions/sync/{item_id}")
 async def sync_transactions(

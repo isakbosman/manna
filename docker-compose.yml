@@ -1,24 +1,25 @@
 version: '3.8'
 
 services:
-  postgres:
-    image: postgres:15
-    container_name: manna-postgres
-    environment:
-      POSTGRES_DB: manna_dev
-      POSTGRES_USER: manna
-      POSTGRES_PASSWORD: manna
-      POSTGRES_HOST_AUTH_METHOD: trust
-    ports:
-      - '5432:5432'
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U manna -d manna_dev']
-      interval: 30s
-      timeout: 10s
-      retries: 5
+  # Commented out - using local PostgreSQL instance instead
+  # postgres:
+  #   image: postgres:15
+  #   container_name: manna-postgres
+  #   environment:
+  #     POSTGRES_DB: manna_dev
+  #     POSTGRES_USER: manna
+  #     POSTGRES_PASSWORD: manna
+  #     POSTGRES_HOST_AUTH_METHOD: trust
+  #   ports:
+  #     - '5432:5432'
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #     - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+  #   healthcheck:
+  #     test: ['CMD-SHELL', 'pg_isready -U manna -d manna_dev']
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 5
 
   redis:
     image: redis:7-alpine
@@ -40,21 +41,21 @@ services:
     container_name: manna-backend
     environment:
       - ENVIRONMENT=development
-      - DATABASE_URL=postgresql://manna:manna@postgres:5432/manna_dev
+      # Using local PostgreSQL: database=manna, user=postgres, no password
+      - DATABASE_URL=postgresql://postgres@host.docker.internal:5432/manna
       - REDIS_URL=redis://redis:6379/0
       - PLAID_CLIENT_ID=677453d8ec5d8b0026b553fd
       - PLAID_SECRET=8b2365aea187eff8e24746384a9ee8
       - PLAID_ENVIRONMENT=sandbox
     ports:
-      - '8000:8000'
+      - '8001:8000'
     volumes:
       - ./packages/backend:/app
       - ./data:/app/data
       - ./reports:/app/reports
       - ./tools:/app/tools
     depends_on:
-      postgres:
-        condition: service_healthy
+      # postgres dependency removed - using local instance
       redis:
         condition: service_healthy
     command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
@@ -65,7 +66,7 @@ services:
       dockerfile: ./packages/frontend/Dockerfile
     container_name: manna-frontend
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_API_URL=http://localhost:8001
     ports:
       - '3000:3000'
     volumes:

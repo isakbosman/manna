@@ -1,54 +1,143 @@
 'use client'
 
-import React from 'react'
+import React, { useState, useMemo, useCallback } from 'react'
+import { DashboardLayout } from '../../components/layout/dashboard-layout'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Button } from '../../components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card'
+import { Badge } from '../../components/ui/badge'
+import { Loading } from '../../components/ui/loading'
+import { DataTable } from '../../components/transactions/data-table'
+import { AdvancedFilters, type TransactionFilters } from '../../components/transactions/advanced-filters'
+import { getTransactionColumns } from '../../components/transactions/transaction-columns'
+import { CategorizationModal } from '../../components/transactions/categorization-modal'
+import { CategoryManagement } from '../../components/transactions/category-management'
+import { BulkActions } from '../../components/transactions/bulk-actions'
+import { useSuccessToast, useErrorToast } from '../../components/ui/toast'
 import {
-  RefreshCwIcon,
-  PlusIcon,
-  SettingsIcon,
-  TrendingUpIcon,
-  TrendingDownIcon,
-  DollarSignIcon,
-  CalendarIcon
+  RefreshCw,
+  Download,
+  Upload,
+  Plus,
+  TrendingUp,
+  TrendingDown,
+  DollarSign,
+  Activity,
+  AlertCircle,
+  FileText,
+  Package,
+  SettingsIcon
 } from 'lucide-react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Loading } from '@/components/ui/loading'
-import { TransactionsTable } from '@/components/transactions/transactions-table'
-import { TransactionFilters } from '@/components/transactions/transaction-filters'
-import { TransactionDetailModal } from '@/components/transactions/transaction-detail-modal'
-import { BulkActions } from '@/components/transactions/bulk-actions'
-import { ImportExport } from '@/components/transactions/import-export'
+import { format, startOfMonth, endOfMonth } from 'date-fns'
+import { formatCurrency } from '../../lib/utils'
 import {
-  Transaction,
-  Account,
-  Category,
-  TransactionFilters as ITransactionFilters,
   transactionsApi,
-  accountsApi,
-  categoriesApi
-} from '@/lib/api'
-import { ProtectedRoute } from '@/components/auth/protected-route'
-import { cn } from '@/lib/utils'
-import { format, subDays, startOfMonth, endOfMonth } from 'date-fns'
+  type Transaction,
+  type TransactionStats
+} from '../../lib/api/transactions'
+import { accountsApi, type Account } from '../../lib/api/accounts'
+import { categoriesApi, type Category } from '../../lib/api/categories'
 
-const DEFAULT_FILTERS: ITransactionFilters = {
-  limit: 25,
-  offset: 0,
+// Empty state component
+function EmptyState({
+  icon: Icon,
+  title,
+  description,
+  actionText,
+  onAction
+}: {
+  icon: any
+  title: string
+  description: string
+  actionText?: string
+  onAction?: () => void
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center py-12 text-center">
+      <Icon className="h-12 w-12 text-gray-400 mb-4" />
+      <h3 className="text-lg font-medium text-gray-900 mb-2">{title}</h3>
+      <p className="text-sm text-gray-500 mb-4 max-w-sm">{description}</p>
+      {actionText && onAction && (
+        <Button onClick={onAction}>
+          {actionText}
+        </Button>
+      )}
+    </div>
+  )
+}
+
+// Stats Card Component
+function StatsCard({
+  title,
+  value,
+  icon: Icon,
+  trend,
+  color = 'default',
+  isLoading = false
+}: {
+  title: string
+  value: string | number
+  icon: any
+  trend?: 'up' | 'down'
+  color?: 'default' | 'success' | 'error' | 'warning'
+  isLoading?: boolean
+}) {
+  const colorClasses = {
+    default: 'text-neutral-600',
+    success: 'text-success-600',
+    error: 'text-error-600',
+    warning: 'text-warning-600'
+  }
+
+  const iconColorClasses = {
+    default: 'text-neutral-500',
+    success: 'text-success-500',
+    error: 'text-error-500',
+    warning: 'text-warning-500'
+  }
+
+  return (
+    <Card>
+      <CardContent className="p-6">
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-neutral-600">{title}</p>
+            {isLoading ? (
+              <div className="h-8 w-24 bg-neutral-200 animate-pulse rounded" />
+            ) : (
+              <p className={`text-2xl font-bold ${colorClasses[color]}`}>
+                {value}
+              </p>
+            )}
+          </div>
+          <div className={`p-3 rounded-full bg-neutral-50 ${iconColorClasses[color]}`}>
+            <Icon className="h-6 w-6" />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+const DEFAULT_FILTERS: TransactionFilters = {
   date_from: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
   date_to: format(endOfMonth(new Date()), 'yyyy-MM-dd')
 }
 
 export default function TransactionsPage() {
   const queryClient = useQueryClient()
-  
+  const successToast = useSuccessToast()
+  const errorToast = useErrorToast()
+
+
   // State
-  const [filters, setFilters] = React.useState<ITransactionFilters>(DEFAULT_FILTERS)
-  const [selectedTransaction, setSelectedTransaction] = React.useState<Transaction | null>(null)
-  const [selectedTransactions, setSelectedTransactions] = React.useState<Transaction[]>([])
-  const [showDetailModal, setShowDetailModal] = React.useState(false)
-  const [isRefreshing, setIsRefreshing] = React.useState(false)
+  const [filters, setFilters] = useState<TransactionFilters>(DEFAULT_FILTERS)
+  const [selectedTransactions, setSelectedTransactions] = useState<Transaction[]>([])
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [categorizationModalOpen, setCategorizationModalOpen] = useState(false)
+  const [transactionsToCategrize, setTransactionsToCategrize] = useState<Transaction[]>([])
+  const [categoryManagementOpen, setCategoryManagementOpen] = useState(false)
+  const [showFloatingActions, setShowFloatingActions] = useState(false)
 
   // Queries
   const {
@@ -57,8 +146,7 @@ export default function TransactionsPage() {
     error: transactionsError
   } = useQuery({
     queryKey: ['transactions', filters],
-    queryFn: () => transactionsApi.getTransactions(filters),
-    staleTime: 30000 // 30 seconds
+    queryFn: () => transactionsApi.getTransactions(filters)
   })
 
   const {
@@ -66,7 +154,7 @@ export default function TransactionsPage() {
     isLoading: accountsLoading
   } = useQuery({
     queryKey: ['accounts'],
-    queryFn: () => accountsApi.getAccounts()
+    queryFn: accountsApi.getAccounts
   })
 
   const {
@@ -74,11 +162,11 @@ export default function TransactionsPage() {
     isLoading: categoriesLoading
   } = useQuery({
     queryKey: ['categories'],
-    queryFn: () => categoriesApi.getCategories()
+    queryFn: categoriesApi.getCategories
   })
 
   const {
-    data: transactionStats,
+    data: stats,
     isLoading: statsLoading
   } = useQuery({
     queryKey: ['transaction-stats', filters],
@@ -89,305 +177,385 @@ export default function TransactionsPage() {
     })
   })
 
-  const transactions = transactionsData?.transactions || []
-  const totalTransactions = transactionsData?.total || 0
+  // Mutations
+  const updateMutation = useMutation({
+    mutationFn: ({ id, updates }: { id: string; updates: Partial<Transaction> }) =>
+      transactionsApi.updateTransaction(id, updates),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transactions'] })
+      queryClient.invalidateQueries({ queryKey: ['transaction-stats'] })
+      successToast('Transaction Updated', 'The transaction has been updated successfully')
+    },
+    onError: (error: any) => {
+      errorToast('Update Failed', error.message || 'Failed to update transaction')
+    }
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: transactionsApi.deleteTransaction,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transactions'] })
+      queryClient.invalidateQueries({ queryKey: ['transaction-stats'] })
+      successToast('Transaction Deleted', 'The transaction has been deleted successfully')
+    },
+    onError: (error: any) => {
+      errorToast('Delete Failed', error.message || 'Failed to delete transaction')
+    }
+  })
+
+  const categorizeMutation = useMutation({
+    mutationFn: (transactionIds: string[]) => transactionsApi.categorizeTransactions(transactionIds),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['transactions'] })
+      queryClient.invalidateQueries({ queryKey: ['transaction-stats'] })
+      successToast(
+        'Categorization Complete',
+        `Successfully categorized ${result.categorized_count} transactions`
+      )
+    },
+    onError: (error: any) => {
+      errorToast('Categorization Failed', error.message || 'Failed to categorize transactions')
+    }
+  })
 
   // Handlers
-  const handleTransactionSelect = (transaction: Transaction) => {
-    setSelectedTransaction(transaction)
-    setShowDetailModal(true)
-  }
-
-  const handleTransactionUpdate = (updatedTransaction: Transaction) => {
-    queryClient.setQueryData(['transactions', filters], (old: any) => {
-      if (!old) return old
-      return {
-        ...old,
-        transactions: old.transactions.map((t: Transaction) =>
-          t.id === updatedTransaction.id ? updatedTransaction : t
-        )
-      }
-    })
-    
-    // Also update stats
-    queryClient.invalidateQueries({ queryKey: ['transaction-stats'] })
-  }
-
-  const handleTransactionDelete = (transactionId: string) => {
-    queryClient.setQueryData(['transactions', filters], (old: any) => {
-      if (!old) return old
-      return {
-        ...old,
-        transactions: old.transactions.filter((t: Transaction) => t.id !== transactionId),
-        total: old.total - 1
-      }
-    })
-    
-    // Clear selection if deleted transaction was selected
-    if (selectedTransaction?.id === transactionId) {
-      setSelectedTransaction(null)
-      setShowDetailModal(false)
-    }
-    
-    // Remove from bulk selection
-    setSelectedTransactions(prev => prev.filter(t => t.id !== transactionId))
-    
-    // Update stats
-    queryClient.invalidateQueries({ queryKey: ['transaction-stats'] })
-  }
-
-  const handleBulkUpdate = (updatedTransactions: Transaction[]) => {
-    queryClient.setQueryData(['transactions', filters], (old: any) => {
-      if (!old) return old
-      
-      const updatedMap = new Map(updatedTransactions.map(t => [t.id, t]))
-      
-      return {
-        ...old,
-        transactions: old.transactions.map((t: Transaction) => 
-          updatedMap.has(t.id) ? updatedMap.get(t.id) : t
-        )
-      }
-    })
-    
-    // Update stats
-    queryClient.invalidateQueries({ queryKey: ['transaction-stats'] })
-  }
-
-  const handleBulkDelete = (transactionIds: string[]) => {
-    queryClient.setQueryData(['transactions', filters], (old: any) => {
-      if (!old) return old
-      return {
-        ...old,
-        transactions: old.transactions.filter((t: Transaction) => 
-          !transactionIds.includes(t.id)
-        ),
-        total: old.total - transactionIds.length
-      }
-    })
-    
-    // Clear selections
-    setSelectedTransactions([])
-    
-    // Update stats
-    queryClient.invalidateQueries({ queryKey: ['transaction-stats'] })
-  }
-
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     setIsRefreshing(true)
     try {
-      // Sync transactions from all accounts
       await transactionsApi.syncTransactions()
-      
-      // Refresh all queries
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['transactions'] }),
-        queryClient.invalidateQueries({ queryKey: ['transaction-stats'] }),
-        queryClient.invalidateQueries({ queryKey: ['accounts'] })
-      ])
-    } catch (error) {
-      console.error('Failed to refresh transactions:', error)
+      await queryClient.invalidateQueries({ queryKey: ['transactions'] })
+      await queryClient.invalidateQueries({ queryKey: ['transaction-stats'] })
+      successToast('Sync Complete', 'Transactions have been synced successfully')
+    } catch (error: any) {
+      errorToast('Sync Failed', error.message || 'Failed to sync transactions')
     } finally {
       setIsRefreshing(false)
     }
-  }
+  }, [queryClient, successToast, errorToast])
 
-  const handleFiltersReset = () => {
+  const handleExport = useCallback(async (format: 'csv' | 'xlsx') => {
+    try {
+      await transactionsApi.exportTransactions(filters, format)
+      successToast('Export Complete', `Transactions exported as ${format.toUpperCase()}`)
+    } catch (error: any) {
+      errorToast('Export Failed', error.message || 'Failed to export transactions')
+    }
+  }, [filters, successToast, errorToast])
+
+  const handleTransactionEdit = useCallback((transaction: Transaction) => {
+    // This would open an edit modal - to be implemented in Phase 3
+    console.log('Edit transaction:', transaction)
+  }, [])
+
+  const handleTransactionDelete = useCallback((transaction: Transaction) => {
+    if (confirm('Are you sure you want to delete this transaction?')) {
+      deleteMutation.mutate(transaction.id)
+    }
+  }, [deleteMutation])
+
+  const handleTransactionCategorize = useCallback((transaction: Transaction) => {
+    setTransactionsToCategrize([transaction])
+    setCategorizationModalOpen(true)
+  }, [])
+
+  const handleBulkCategorize = useCallback(() => {
+    if (selectedTransactions.length === 0) {
+      errorToast('No Selection', 'Please select transactions to categorize')
+      return
+    }
+    setTransactionsToCategrize(selectedTransactions)
+    setCategorizationModalOpen(true)
+  }, [selectedTransactions, errorToast])
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedTransactions([])
+    setShowFloatingActions(false)
+  }, [])
+
+  const handleSelectionChange = useCallback((transactions: Transaction[]) => {
+    setSelectedTransactions(transactions)
+    setShowFloatingActions(transactions.length > 0)
+  }, [])
+
+  const handleFiltersReset = useCallback(() => {
     setFilters(DEFAULT_FILTERS)
-  }
+  }, [])
 
-  const handleImported = () => {
+  const handleCategorizationModalClose = useCallback(() => {
+    setCategorizationModalOpen(false)
+    setTransactionsToCategrize([])
+    // Don't clear selection here - let user decide
+  }, [])
+
+  const handleTransactionsUpdated = useCallback((updatedTransactions: Transaction[]) => {
     queryClient.invalidateQueries({ queryKey: ['transactions'] })
     queryClient.invalidateQueries({ queryKey: ['transaction-stats'] })
-  }
+  }, [queryClient])
 
-  // Calculated values
-  const formatAmount = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount)
-  }
+  // Memoized values
+  const transactions = useMemo(() => transactionsData?.transactions || [], [transactionsData])
+  const totalTransactions = useMemo(() => transactionsData?.total || 0, [transactionsData])
 
-  const loading = transactionsLoading || accountsLoading || categoriesLoading
+  // Keyboard shortcuts
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd/Ctrl + A: Select all visible transactions
+      if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
+        e.preventDefault()
+        if (transactions && transactions.length > 0) {
+          setSelectedTransactions(transactions)
+          setShowFloatingActions(true)
+          successToast('All Visible Transactions Selected', `Selected ${transactions.length} transactions`)
+        }
+      }
 
-  if (loading) {
-    return (
-      <ProtectedRoute>
-        <div className="container mx-auto px-4 py-8">
-          <Loading />
-        </div>
-      </ProtectedRoute>
-    )
-  }
+      // Escape: Clear selection
+      if (e.key === 'Escape') {
+        if (selectedTransactions.length > 0) {
+          handleClearSelection()
+          successToast('Selection Cleared', 'All transactions deselected')
+        }
+      }
+
+      // Cmd/Ctrl + Shift + C: Open categorization modal
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'C') {
+        e.preventDefault()
+        if (selectedTransactions.length > 0) {
+          handleBulkCategorize()
+        }
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [transactions, selectedTransactions, handleClearSelection, handleBulkCategorize, successToast])
+
+  const columns = useMemo(
+    () => getTransactionColumns({
+      accounts,
+      categories,
+      onEdit: handleTransactionEdit,
+      onDelete: handleTransactionDelete,
+      onCategorize: handleTransactionCategorize
+    }),
+    [accounts, categories, handleTransactionEdit, handleTransactionDelete, handleTransactionCategorize]
+  )
+
+  // Loading state
+  const isLoading = transactionsLoading || accountsLoading || categoriesLoading
+
+  // Check if we have any data
+  const hasNoData = !isLoading && transactions.length === 0 && !transactionsError
 
   return (
-    <ProtectedRoute>
-      <div className="container mx-auto px-4 py-8 space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
+    <DashboardLayout
+      title="Transactions"
+      description="View and manage all your financial transactions across all accounts"
+    >
+      <div className="space-y-6 relative">
+        {/* Header Actions */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-neutral-900">Transactions</h1>
-            <p className="text-neutral-600 mt-1">
-              Manage and categorize your financial transactions
+            <h1 className="text-2xl font-bold text-neutral-900">All Transactions</h1>
+            <p className="text-sm text-neutral-600 mt-1">
+              {totalTransactions.toLocaleString()} total transactions
+              {filters.date_from && filters.date_to && (
+                <span className="ml-1">
+                  from {format(new Date(filters.date_from), 'MMM d')} to {format(new Date(filters.date_to), 'MMM d, yyyy')}
+                </span>
+              )}
+              {selectedTransactions.length > 0 && (
+                <span className="ml-2 text-primary-600 font-medium">
+                  • {selectedTransactions.length} selected
+                </span>
+              )}
             </p>
+            {selectedTransactions.length > 0 && (
+              <div className="text-xs text-neutral-500 mt-1">
+                Keyboard shortcuts: <kbd className="px-1 py-0.5 bg-neutral-100 rounded text-xs">Cmd+A</kbd> select all,
+                <kbd className="px-1 py-0.5 bg-neutral-100 rounded text-xs">Esc</kbd> clear,
+                <kbd className="px-1 py-0.5 bg-neutral-100 rounded text-xs">Cmd+Shift+C</kbd> categorize
+              </div>
+            )}
           </div>
-          
-          <div className="flex items-center gap-3">
-            <ImportExport
-              filters={filters}
-              selectedTransactionIds={selectedTransactions.map(t => t.id)}
-              onTransactionsImported={handleImported}
-            />
-            
+
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleExport('csv')}
+              disabled={transactions.length === 0}
+            >
+              <Download className="h-4 w-4 mr-1" />
+              Export
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCategoryManagementOpen(true)}
+            >
+              <SettingsIcon className="h-4 w-4 mr-1" />
+              Manage Categories
+            </Button>
             <Button
               variant="outline"
               size="sm"
               onClick={handleRefresh}
-              loading={isRefreshing}
+              disabled={isRefreshing}
             >
-              <RefreshCwIcon className="h-4 w-4 mr-1" />
+              {isRefreshing ? (
+                <Loading size="sm" className="mr-1" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-1" />
+              )}
               Sync
             </Button>
-            
             <Button size="sm">
-              <PlusIcon className="h-4 w-4 mr-1" />
+              <Plus className="h-4 w-4 mr-1" />
               Add Transaction
             </Button>
           </div>
         </div>
 
         {/* Stats Cards */}
-        {transactionStats && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-neutral-600">Total Income</p>
-                  <p className="text-2xl font-bold text-success-600">
-                    {formatAmount(transactionStats.total_income)}
-                  </p>
-                </div>
-                <TrendingUpIcon className="h-8 w-8 text-success-500" />
-              </div>
-            </Card>
-            
-            <Card className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-neutral-600">Total Expenses</p>
-                  <p className="text-2xl font-bold text-error-600">
-                    {formatAmount(Math.abs(transactionStats.total_expenses))}
-                  </p>
-                </div>
-                <TrendingDownIcon className="h-8 w-8 text-error-500" />
-              </div>
-            </Card>
-            
-            <Card className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-neutral-600">Net Income</p>
-                  <p className={cn(
-                    "text-2xl font-bold",
-                    transactionStats.net_income >= 0 ? "text-success-600" : "text-error-600"
-                  )}>
-                    {formatAmount(transactionStats.net_income)}
-                  </p>
-                </div>
-                <DollarSignIcon className="h-8 w-8 text-primary-500" />
-              </div>
-            </Card>
-            
-            <Card className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-neutral-600">Transactions</p>
-                  <p className="text-2xl font-bold text-neutral-900">
-                    {transactionStats.transaction_count.toLocaleString()}
-                  </p>
-                  <p className="text-xs text-neutral-500">
-                    Avg: {formatAmount(transactionStats.avg_transaction_amount)}
-                  </p>
-                </div>
-                <CalendarIcon className="h-8 w-8 text-neutral-500" />
-              </div>
-            </Card>
+        {stats && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatsCard
+              title="Total Income"
+              value={formatCurrency(stats.total_income)}
+              icon={TrendingUp}
+              color="success"
+              isLoading={statsLoading}
+            />
+            <StatsCard
+              title="Total Expenses"
+              value={formatCurrency(Math.abs(stats.total_expenses))}
+              icon={TrendingDown}
+              color="error"
+              isLoading={statsLoading}
+            />
+            <StatsCard
+              title="Net Income"
+              value={formatCurrency(stats.net_income)}
+              icon={DollarSign}
+              color={stats.net_income >= 0 ? 'success' : 'error'}
+              isLoading={statsLoading}
+            />
+            <StatsCard
+              title="Avg Transaction"
+              value={formatCurrency(stats.avg_transaction_amount)}
+              icon={Activity}
+              isLoading={statsLoading}
+            />
           </div>
         )}
 
         {/* Filters */}
-        <Card className="p-4">
-          <TransactionFilters
-            filters={filters}
-            onFiltersChange={setFilters}
-            accounts={accounts}
-            categories={categories}
-            onReset={handleFiltersReset}
-          />
+        <Card>
+          <CardHeader className="pb-4">
+            <CardTitle className="text-lg">Filters</CardTitle>
+            <CardDescription>
+              Filter and search through your transactions
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <AdvancedFilters
+              filters={filters}
+              onFiltersChange={setFilters}
+              accounts={accounts}
+              categories={categories}
+              onReset={handleFiltersReset}
+            />
+          </CardContent>
         </Card>
 
-        {/* Bulk Actions */}
+        {/* Enhanced Bulk Actions - Sticky when scrolling */}
         {selectedTransactions.length > 0 && (
-          <BulkActions
-            selectedTransactions={selectedTransactions}
-            onTransactionsUpdated={handleBulkUpdate}
-            onTransactionsDeleted={handleBulkDelete}
-            onSelectionClear={() => setSelectedTransactions([])}
-          />
+          <div className="sticky top-4 z-10">
+            <BulkActions
+              selectedTransactions={selectedTransactions}
+              onClearSelection={handleClearSelection}
+              onCategorize={handleBulkCategorize}
+              onTransactionsUpdated={handleTransactionsUpdated}
+            />
+          </div>
+        )}
+
+        {/* Floating Action Button for Mobile */}
+        {showFloatingActions && selectedTransactions.length > 0 && (
+          <div className="fixed bottom-6 right-6 z-20 md:hidden">
+            <Button
+              onClick={handleBulkCategorize}
+              className="h-14 w-14 rounded-full shadow-lg"
+              size="sm"
+            >
+              <Tag className="h-6 w-6" />
+            </Button>
+          </div>
         )}
 
         {/* Transactions Table */}
-        <Card className="overflow-hidden">
-          <div className="p-4 border-b">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-semibold text-neutral-900">Transactions</h2>
-                <Badge variant="outline">
-                  {totalTransactions.toLocaleString()} total
-                </Badge>
-              </div>
-              
-              <Button variant="ghost" size="sm">
-                <SettingsIcon className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-          
-          <TransactionsTable
-            transactions={transactions}
-            accounts={accounts}
-            categories={categories}
-            isLoading={transactionsLoading || isRefreshing}
-            onTransactionSelect={handleTransactionSelect}
-            onTransactionUpdate={handleTransactionUpdate}
-            onTransactionDelete={handleTransactionDelete}
-            onRowSelectionChange={setSelectedTransactions}
-          />
-        </Card>
-
-        {/* Transaction Detail Modal */}
-        <TransactionDetailModal
-          transaction={selectedTransaction}
-          isOpen={showDetailModal}
-          onClose={() => {
-            setShowDetailModal(false)
-            setSelectedTransaction(null)
-          }}
-          onTransactionUpdated={handleTransactionUpdate}
-          onTransactionDeleted={handleTransactionDelete}
-          accounts={accounts}
-        />
-
-        {/* Error Display */}
-        {transactionsError && (
-          <Card className="p-4 bg-error-50 border-error-200">
-            <p className="text-error-700">
-              Failed to load transactions. Please try refreshing the page.
-            </p>
+        {transactionsError ? (
+          <Card>
+            <CardContent className="py-12">
+              <EmptyState
+                icon={AlertCircle}
+                title="Error Loading Transactions"
+                description={transactionsError.message || 'Failed to load transactions'}
+                actionText="Try Again"
+                onAction={handleRefresh}
+              />
+            </CardContent>
+          </Card>
+        ) : hasNoData ? (
+          <Card>
+            <CardContent className="py-12">
+              <EmptyState
+                icon={filters.date_from || filters.account_id ? FileText : Package}
+                title={filters.date_from || filters.account_id ? "No Transactions Found" : "No Transactions Yet"}
+                description={
+                  filters.date_from || filters.account_id
+                    ? "No transactions match your current filters. Try adjusting your search criteria."
+                    : "You don't have any transactions yet. Connect your accounts to start tracking."
+                }
+                actionText={filters.date_from || filters.account_id ? "Clear Filters" : "Connect Account"}
+                onAction={() => filters.date_from || filters.account_id ? handleFiltersReset() : window.location.href = '/accounts'}
+              />
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="overflow-hidden">
+            <DataTable
+              columns={columns}
+              data={transactions}
+              onRowSelectionChange={handleSelectionChange}
+              onRowClick={(transaction) => handleTransactionCategorize(transaction)}
+              searchKey="description"
+              searchPlaceholder="Search by description or merchant..."
+              showColumnToggle={true}
+              showPagination={true}
+              pageSize={50}
+              isLoading={isLoading || isRefreshing}
+              emptyMessage="No transactions found matching your filters."
+              className="border-0"
+            />
           </Card>
         )}
       </div>
-    </ProtectedRoute>
+
+      {/* Categorization Modal */}
+      <CategorizationModal
+        isOpen={categorizationModalOpen}
+        onClose={handleCategorizationModalClose}
+        transactions={transactionsToCategrize}
+        onTransactionsUpdated={handleTransactionsUpdated}
+      />
+
+      {/* Category Management Modal */}
+      <CategoryManagement
+        isOpen={categoryManagementOpen}
+        onClose={() => setCategoryManagementOpen(false)}
+      />
+    </DashboardLayout>
   )
 }

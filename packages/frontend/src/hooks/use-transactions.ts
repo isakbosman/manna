@@ -1,1 +1,196 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'\nimport { transactionsApi, type Transaction, type TransactionFilters } from '@/lib/api/transactions'\nimport { toast } from '@/hooks/use-toast'\n\n// Query keys for consistent cache management\nexport const transactionKeys = {\n  all: ['transactions'] as const,\n  lists: () => [...transactionKeys.all, 'list'] as const,\n  list: (filters?: TransactionFilters) => [...transactionKeys.lists(), filters] as const,\n  details: () => [...transactionKeys.all, 'detail'] as const,\n  detail: (id: string) => [...transactionKeys.details(), id] as const,\n  stats: (filters?: any) => [...transactionKeys.all, 'stats', filters] as const,\n}\n\n// Hook for fetching transactions with filters\nexport function useTransactions(filters?: TransactionFilters) {\n  return useQuery({\n    queryKey: transactionKeys.list(filters),\n    queryFn: () => transactionsApi.getTransactions(filters),\n    staleTime: 1000 * 60 * 2, // 2 minutes\n  })\n}\n\n// Hook for fetching a single transaction\nexport function useTransaction(id: string) {\n  return useQuery({\n    queryKey: transactionKeys.detail(id),\n    queryFn: () => transactionsApi.getTransaction(id),\n    enabled: !!id,\n  })\n}\n\n// Hook for fetching transaction statistics\nexport function useTransactionStats(filters?: {\n  date_from?: string\n  date_to?: string\n  account_id?: string\n}) {\n  return useQuery({\n    queryKey: transactionKeys.stats(filters),\n    queryFn: () => transactionsApi.getTransactionStats(filters),\n    staleTime: 1000 * 60 * 5, // 5 minutes\n  })\n}\n\n// Hook for updating a transaction\nexport function useUpdateTransaction() {\n  const queryClient = useQueryClient()\n  \n  return useMutation({\n    mutationFn: ({ id, updates }: { id: string; updates: Partial<Transaction> }) => \n      transactionsApi.updateTransaction(id, updates),\n    onSuccess: (updatedTransaction) => {\n      // Update the specific transaction in cache\n      queryClient.setQueryData(\n        transactionKeys.detail(updatedTransaction.id),\n        updatedTransaction\n      )\n      \n      // Invalidate transaction lists to refetch\n      queryClient.invalidateQueries({\n        queryKey: transactionKeys.lists(),\n      })\n      \n      // Invalidate stats\n      queryClient.invalidateQueries({\n        queryKey: transactionKeys.stats(),\n      })\n      \n      toast({\n        title: 'Transaction updated',\n        description: 'The transaction has been successfully updated.',\n      })\n    },\n    onError: (error: any) => {\n      toast({\n        title: 'Update failed',\n        description: error.message || 'Failed to update transaction.',\n        variant: 'destructive',\n      })\n    },\n  })\n}\n\n// Hook for bulk updating transactions\nexport function useBulkUpdateTransactions() {\n  const queryClient = useQueryClient()\n  \n  return useMutation({\n    mutationFn: transactionsApi.bulkUpdateTransactions,\n    onSuccess: (updatedTransactions) => {\n      // Invalidate all transaction-related queries\n      queryClient.invalidateQueries({\n        queryKey: transactionKeys.all,\n      })\n      \n      toast({\n        title: 'Transactions updated',\n        description: `${updatedTransactions.length} transactions have been updated.`,\n      })\n    },\n    onError: (error: any) => {\n      toast({\n        title: 'Bulk update failed',\n        description: error.message || 'Failed to update transactions.',\n        variant: 'destructive',\n      })\n    },\n  })\n}\n\n// Hook for syncing transactions from Plaid\nexport function useSyncTransactions() {\n  const queryClient = useQueryClient()\n  \n  return useMutation({\n    mutationFn: transactionsApi.syncTransactions,\n    onSuccess: (result) => {\n      // Invalidate all transaction queries to show fresh data\n      queryClient.invalidateQueries({\n        queryKey: transactionKeys.all,\n      })\n      \n      toast({\n        title: 'Sync completed',\n        description: `Synced ${result.synced_count} transactions. ${result.new_transactions} new, ${result.updated_transactions} updated.`,\n      })\n    },\n    onError: (error: any) => {\n      toast({\n        title: 'Sync failed',\n        description: error.message || 'Failed to sync transactions.',\n        variant: 'destructive',\n      })\n    },\n  })\n}\n\n// Hook for categorizing transactions\nexport function useCategorizeTransactions() {\n  const queryClient = useQueryClient()\n  \n  return useMutation({\n    mutationFn: transactionsApi.categorizeTransactions,\n    onSuccess: (result) => {\n      // Invalidate transaction queries\n      queryClient.invalidateQueries({\n        queryKey: transactionKeys.all,\n      })\n      \n      toast({\n        title: 'Categorization completed',\n        description: `Categorized ${result.categorized_count} transactions.`,\n      })\n    },\n    onError: (error: any) => {\n      toast({\n        title: 'Categorization failed',\n        description: error.message || 'Failed to categorize transactions.',\n        variant: 'destructive',\n      })\n    },\n  })\n}\n\n// Hook for deleting a transaction\nexport function useDeleteTransaction() {\n  const queryClient = useQueryClient()\n  \n  return useMutation({\n    mutationFn: transactionsApi.deleteTransaction,\n    onSuccess: (_, deletedId) => {\n      // Remove from cache\n      queryClient.removeQueries({\n        queryKey: transactionKeys.detail(deletedId),\n      })\n      \n      // Invalidate lists\n      queryClient.invalidateQueries({\n        queryKey: transactionKeys.lists(),\n      })\n      \n      toast({\n        title: 'Transaction deleted',\n        description: 'The transaction has been successfully deleted.',\n      })\n    },\n    onError: (error: any) => {\n      toast({\n        title: 'Delete failed',\n        description: error.message || 'Failed to delete transaction.',\n        variant: 'destructive',\n      })\n    },\n  })\n}"
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { transactionsApi, type Transaction, type TransactionFilters } from '@/lib/api/transactions'
+import { toast } from '@/hooks/use-toast'
+
+// Query keys for consistent cache management
+export const transactionKeys = {
+  all: ['transactions'] as const,
+  lists: () => [...transactionKeys.all, 'list'] as const,
+  list: (filters?: TransactionFilters) => [...transactionKeys.lists(), filters] as const,
+  details: () => [...transactionKeys.all, 'detail'] as const,
+  detail: (id: string) => [...transactionKeys.details(), id] as const,
+  stats: (filters?: any) => [...transactionKeys.all, 'stats', filters] as const,
+}
+
+// Hook for fetching transactions with filters
+export function useTransactions(filters?: TransactionFilters) {
+  return useQuery({
+    queryKey: transactionKeys.list(filters),
+    queryFn: () => transactionsApi.getTransactions(filters),
+    staleTime: 1000 * 60 * 2, // 2 minutes
+  })
+}
+
+// Hook for fetching a single transaction
+export function useTransaction(id: string) {
+  return useQuery({
+    queryKey: transactionKeys.detail(id),
+    queryFn: () => transactionsApi.getTransaction(id),
+    enabled: !!id,
+  })
+}
+
+// Hook for fetching transaction statistics
+export function useTransactionStats(filters?: {
+  date_from?: string
+  date_to?: string
+  account_id?: string
+}) {
+  return useQuery({
+    queryKey: transactionKeys.stats(filters),
+    queryFn: () => transactionsApi.getTransactionStats(filters),
+    staleTime: 1000 * 60 * 5, // 5 minutes
+  })
+}
+
+// Hook for updating a transaction
+export function useUpdateTransaction() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ id, updates }: { id: string; updates: Partial<Transaction> }) =>
+      transactionsApi.updateTransaction(id, updates),
+    onSuccess: (updatedTransaction) => {
+      // Update the specific transaction in cache
+      queryClient.setQueryData(
+        transactionKeys.detail(updatedTransaction.id),
+        updatedTransaction
+      )
+
+      // Invalidate transaction lists to refetch
+      queryClient.invalidateQueries({
+        queryKey: transactionKeys.lists(),
+      })
+
+      // Invalidate stats
+      queryClient.invalidateQueries({
+        queryKey: transactionKeys.stats(),
+      })
+
+      toast({
+        title: 'Transaction updated',
+        description: 'The transaction has been successfully updated.',
+      })
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Update failed',
+        description: error.message || 'Failed to update transaction.',
+        variant: 'destructive',
+      })
+    },
+  })
+}
+
+// Hook for bulk updating transactions
+export function useBulkUpdateTransactions() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: transactionsApi.bulkUpdateTransactions,
+    onSuccess: (updatedTransactions) => {
+      // Invalidate all transaction-related queries
+      queryClient.invalidateQueries({
+        queryKey: transactionKeys.all,
+      })
+
+      toast({
+        title: 'Transactions updated',
+        description: `${updatedTransactions.length} transactions have been updated.`,
+      })
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Bulk update failed',
+        description: error.message || 'Failed to update transactions.',
+        variant: 'destructive',
+      })
+    },
+  })
+}
+
+// Hook for syncing transactions from Plaid
+export function useSyncTransactions() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: transactionsApi.syncTransactions,
+    onSuccess: (result) => {
+      // Invalidate all transaction queries to show fresh data
+      queryClient.invalidateQueries({
+        queryKey: transactionKeys.all,
+      })
+
+      toast({
+        title: 'Sync completed',
+        description: `Synced ${result.synced_count} transactions. ${result.new_transactions} new, ${result.updated_transactions} updated.`,
+      })
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Sync failed',
+        description: error.message || 'Failed to sync transactions.',
+        variant: 'destructive',
+      })
+    },
+  })
+}
+
+// Hook for categorizing transactions
+export function useCategorizeTransactions() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: transactionsApi.categorizeTransactions,
+    onSuccess: (result) => {
+      // Invalidate transaction queries
+      queryClient.invalidateQueries({
+        queryKey: transactionKeys.all,
+      })
+
+      toast({
+        title: 'Categorization completed',
+        description: `Categorized ${result.categorized_count} transactions.`,
+      })
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Categorization failed',
+        description: error.message || 'Failed to categorize transactions.',
+        variant: 'destructive',
+      })
+    },
+  })
+}
+
+// Hook for deleting a transaction
+export function useDeleteTransaction() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: transactionsApi.deleteTransaction,
+    onSuccess: (_, deletedId) => {
+      // Remove from cache
+      queryClient.removeQueries({
+        queryKey: transactionKeys.detail(deletedId),
+      })
+
+      // Invalidate lists
+      queryClient.invalidateQueries({
+        queryKey: transactionKeys.lists(),
+      })
+
+      toast({
+        title: 'Transaction deleted',
+        description: 'The transaction has been successfully deleted.',
+      })
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Delete failed',
+        description: error.message || 'Failed to delete transaction.',
+        variant: 'destructive',
+      })
+    },
+  })
+}

@@ -1,2 +1,175 @@
-import { api } from '@/lib/api'\n\nexport interface Transaction {\n  id: string\n  account_id: string\n  plaid_transaction_id?: string\n  amount: number\n  date: string\n  description: string\n  category?: string\n  subcategory?: string\n  merchant_name?: string\n  account_owner?: string\n  is_pending: boolean
-  notes?: string\n  created_at: string\n  updated_at: string\n}\n\nexport interface TransactionFilters {\n  account_id?: string\n  category?: string\n  date_from?: string\n  date_to?: string\n  amount_min?: number\n  amount_max?: number\n  search?: string\n  is_pending?: boolean\n  limit?: number\n  offset?: number\n}\n\nexport interface TransactionStats {\n  total_income: number\n  total_expenses: number\n  net_income: number\n  transaction_count: number\n  avg_transaction_amount: number\n}\n\nexport const transactionsApi = {\n  // Get all transactions with optional filters\n  getTransactions: async (filters?: TransactionFilters): Promise<{\n    transactions: Transaction[]\n    total: number\n  }> => {\n    const params = new URLSearchParams()\n    \n    if (filters) {\n      Object.entries(filters).forEach(([key, value]) => {\n        if (value !== undefined && value !== null) {\n          params.append(key, value.toString())\n        }\n      })\n    }\n    \n    return api.get(`/api/v1/transactions?${params.toString()}`)\n  },\n\n  // Get a specific transaction by ID\n  getTransaction: async (id: string): Promise<Transaction> => {\n    return api.get(`/api/v1/transactions/${id}`)\n  },\n\n  // Update a transaction\n  updateTransaction: async (id: string, updates: Partial<Transaction>): Promise<Transaction> => {\n    return api.put(`/api/v1/transactions/${id}`, updates)\n  },\n\n  // Delete a transaction\n  deleteTransaction: async (id: string): Promise<void> => {\n    return api.delete(`/api/v1/transactions/${id}`)\n  },\n\n  // Bulk update transactions\n  bulkUpdateTransactions: async (updates: {\n    transaction_ids: string[]\n    updates: Partial<Transaction>\n  }): Promise<Transaction[]> => {\n    return api.put('/api/v1/transactions/bulk', updates)\n  },\n\n  // Get transaction statistics\n  getTransactionStats: async (filters?: {\n    date_from?: string\n    date_to?: string\n    account_id?: string\n  }): Promise<TransactionStats> => {\n    const params = new URLSearchParams()\n    \n    if (filters) {\n      Object.entries(filters).forEach(([key, value]) => {\n        if (value !== undefined && value !== null) {\n          params.append(key, value.toString())\n        }\n      })\n    }\n    \n    return api.get(`/api/v1/transactions/stats?${params.toString()}`)\n  },\n\n  // Sync transactions from Plaid\n  syncTransactions: async (accountId?: string): Promise<{\n    synced_count: number\n    new_transactions: number\n    updated_transactions: number\n  }> => {\n    return api.post('/api/v1/transactions/sync', { account_id: accountId })\n  },\n\n  // Categorize transactions using ML\n  categorizeTransactions: async (transactionIds: string[]): Promise<{\n    categorized_count: number\n    transactions: Transaction[]\n  }> => {\n    return api.post('/api/v1/transactions/categorize', {\n      transaction_ids: transactionIds\n    })\n  },\n\n  // Export transactions\n  exportTransactions: async (filters?: TransactionFilters, format: 'csv' | 'xlsx' = 'csv'): Promise<void> => {\n    const params = new URLSearchParams()\n    params.append('format', format)\n    \n    if (filters) {\n      Object.entries(filters).forEach(([key, value]) => {\n        if (value !== undefined && value !== null) {\n          params.append(key, value.toString())\n        }\n      })\n    }\n    \n    return api.download(`/api/v1/transactions/export?${params.toString()}`, `transactions.${format}`)\n  }\n}"
+import { api } from '../api'
+
+export interface Transaction {
+  id: string
+  account_id: string
+  plaid_transaction_id?: string
+  amount: number
+  date: string
+  description: string
+  category?: string
+  category_id?: string
+  subcategory?: string
+  merchant_name?: string
+  account_owner?: string
+  is_pending: boolean
+  notes?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface TransactionFilters {
+  account_id?: string
+  category?: string
+  category_id?: string
+  date_from?: string
+  date_to?: string
+  amount_min?: number
+  amount_max?: number
+  search?: string
+  is_pending?: boolean
+  is_reviewed?: boolean
+  limit?: number
+  offset?: number
+}
+
+export interface TransactionStats {
+  total_income: number
+  total_expenses: number
+  net_income: number
+  transaction_count: number
+  avg_transaction_amount: number
+}
+
+export const transactionsApi = {
+  // Get all transactions with optional filters
+  getTransactions: async (filters?: TransactionFilters): Promise<{
+    transactions: Transaction[]
+    total: number
+  }> => {
+    const params = new URLSearchParams()
+
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          params.append(key, value.toString())
+        }
+      })
+    }
+
+    return api.get(`/api/v1/transactions?${params.toString()}`)
+  },
+
+  // Get a specific transaction by ID
+  getTransaction: async (id: string): Promise<Transaction> => {
+    return api.get(`/api/v1/transactions/${id}`)
+  },
+
+  // Update a transaction
+  updateTransaction: async (id: string, updates: Partial<Transaction>): Promise<Transaction> => {
+    return api.put(`/api/v1/transactions/${id}`, updates)
+  },
+
+  // Delete a transaction
+  deleteTransaction: async (id: string): Promise<void> => {
+    return api.delete(`/api/v1/transactions/${id}`)
+  },
+
+  // Bulk update transactions
+  bulkUpdateTransactions: async (updates: {
+    transaction_ids: string[]
+    updates: Partial<Transaction>
+  }): Promise<Transaction[]> => {
+    return api.put('/api/v1/transactions/bulk', updates)
+  },
+
+  // Bulk delete transactions
+  bulkDeleteTransactions: async (transactionIds: string[]): Promise<{
+    deleted_count: number
+    failed_ids: string[]
+  }> => {
+    return api.post('/api/v1/transactions/bulk-delete', {
+      transaction_ids: transactionIds
+    })
+  },
+
+  // Mark transactions as reviewed
+  markAsReviewed: async (transactionIds: string[], reviewed: boolean = true): Promise<Transaction[]> => {
+    return api.put('/api/v1/transactions/bulk', {
+      transaction_ids: transactionIds,
+      updates: { notes: reviewed ? 'reviewed' : undefined }
+    })
+  },
+
+  // Get transaction statistics
+  getTransactionStats: async (filters?: {
+    date_from?: string
+    date_to?: string
+    account_id?: string
+  }): Promise<TransactionStats> => {
+    const params = new URLSearchParams()
+
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          params.append(key, value.toString())
+        }
+      })
+    }
+
+    return api.get(`/api/v1/transactions/stats?${params.toString()}`)
+  },
+
+  // Sync transactions from Plaid
+  syncTransactions: async (accountId?: string): Promise<{
+    synced_count: number
+    new_transactions: number
+    updated_transactions: number
+  }> => {
+    return api.post('/api/v1/plaid/sync-transactions', {
+      account_ids: accountId ? [accountId] : undefined
+    })
+  },
+
+  // Categorize transactions using ML
+  categorizeTransactions: async (transactionIds: string[]): Promise<{
+    categorized_count: number
+    transactions: Transaction[]
+  }> => {
+    return api.post('/api/v1/transactions/categorize', {
+      transaction_ids: transactionIds
+    })
+  },
+
+  // Export transactions
+  exportTransactions: async (filters?: TransactionFilters & { transaction_ids?: string[] }, format: 'csv' | 'xlsx' = 'csv'): Promise<void> => {
+    const params = new URLSearchParams()
+    params.append('format', format)
+
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          if (key === 'transaction_ids' && Array.isArray(value)) {
+            // Handle array of transaction IDs
+            value.forEach(id => params.append('transaction_ids', id))
+          } else {
+            params.append(key, value.toString())
+          }
+        }
+      })
+    }
+
+    return api.download(`/api/v1/transactions/export?${params.toString()}`, `transactions.${format}`)
+  },
+
+  // Get transaction suggestions based on selected transactions
+  getTransactionSuggestions: async (transactionIds: string[]): Promise<{
+    similar_merchants: Array<{ merchant: string; count: number; transaction_ids: string[] }>
+    similar_amounts: Array<{ amount: number; count: number; transaction_ids: string[] }>
+    date_patterns: Array<{ pattern: string; count: number; transaction_ids: string[] }>
+  }> => {
+    return api.post('/api/v1/transactions/suggestions', {
+      transaction_ids: transactionIds
+    })
+  }
+}

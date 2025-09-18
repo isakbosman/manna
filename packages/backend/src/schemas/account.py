@@ -24,7 +24,7 @@ class AccountCreate(AccountBase):
     """Schema for creating a new account."""
     plaid_account_id: str = Field(..., description="Plaid account identifier")
     plaid_item_id: UUID = Field(..., description="Associated Plaid item ID")
-    institution_id: UUID = Field(..., description="Institution ID")
+    institution_id: Optional[UUID] = Field(None, description="Institution ID")
     current_balance_cents: Optional[int] = Field(None, description="Current balance in cents")
     available_balance_cents: Optional[int] = Field(None, description="Available balance in cents")
     limit_cents: Optional[int] = Field(None, description="Credit limit in cents")
@@ -45,7 +45,7 @@ class Account(AccountBase):
     user_id: UUID = Field(..., description="User ID who owns this account")
     plaid_account_id: str = Field(..., description="Plaid account identifier")
     plaid_item_id: UUID = Field(..., description="Associated Plaid item ID")
-    institution_id: UUID = Field(..., description="Institution ID")
+    institution_id: Optional[UUID] = Field(None, description="Institution ID")
     current_balance_cents: Optional[int] = Field(None, description="Current balance in cents")
     available_balance_cents: Optional[int] = Field(None, description="Available balance in cents")
     limit_cents: Optional[int] = Field(None, description="Credit limit in cents")
@@ -78,7 +78,32 @@ class AccountWithInstitution(Account):
     institution_name: Optional[str] = Field(None, description="Institution name")
     institution_logo: Optional[str] = Field(None, description="Institution logo URL")
     institution_color: Optional[str] = Field(None, description="Institution primary color")
-    
+
+    # Add frontend-compatible field names
+    @computed_field
+    @property
+    def balance_current(self) -> float:
+        """Current balance in dollars (frontend compatibility)."""
+        return self.current_balance_cents / 100 if self.current_balance_cents else 0.0
+
+    @computed_field
+    @property
+    def balance_available(self) -> Optional[float]:
+        """Available balance in dollars (frontend compatibility)."""
+        return self.available_balance_cents / 100 if self.available_balance_cents is not None else None
+
+    @computed_field
+    @property
+    def balance_limit(self) -> Optional[float]:
+        """Credit limit in dollars (frontend compatibility)."""
+        return self.limit_cents / 100 if self.limit_cents is not None else None
+
+    @computed_field
+    @property
+    def currency_code(self) -> str:
+        """Currency code (frontend compatibility)."""
+        return self.iso_currency_code
+
     model_config = ConfigDict(from_attributes=True)
 
 

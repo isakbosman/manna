@@ -1,1 +1,235 @@
-'use client'\n\nimport React from 'react'\nimport Link from 'next/link'\nimport { usePathname } from 'next/navigation'\nimport { cn } from '../../lib/utils'\nimport { \n  LayoutDashboard,\n  CreditCard,\n  Building2,\n  FileText,\n  Settings,\n  PieChart,\n  TrendingUp,\n  Wallet,\n  Receipt,\n  Calculator,\n  X\n} from 'lucide-react'\nimport { Button } from '../ui/button'\n\ninterface SidebarProps {\n  isOpen?: boolean\n  onClose?: () => void\n  className?: string\n}\n\nconst navigation = [\n  {\n    name: 'Dashboard',\n    href: '/dashboard',\n    icon: LayoutDashboard,\n    description: 'Overview and key metrics'\n  },\n  {\n    name: 'Transactions',\n    href: '/transactions',\n    icon: Receipt,\n    description: 'View and manage transactions'\n  },\n  {\n    name: 'Accounts',\n    href: '/accounts',\n    icon: Building2,\n    description: 'Bank and credit accounts'\n  },\n  {\n    name: 'Categories',\n    href: '/categories',\n    icon: Calculator,\n    description: 'Transaction categorization'\n  },\n  {\n    name: 'Reports',\n    href: '/reports',\n    icon: FileText,\n    description: 'Financial reports and analysis',\n    subItems: [\n      {\n        name: 'P&L Statement',\n        href: '/reports/pl',\n        icon: TrendingUp\n      },\n      {\n        name: 'Balance Sheet',\n        href: '/reports/balance-sheet',\n        icon: PieChart\n      },\n      {\n        name: 'Cash Flow',\n        href: '/reports/cash-flow',\n        icon: Wallet\n      }\n    ]\n  },\n  {\n    name: 'Plaid Integration',\n    href: '/plaid',\n    icon: CreditCard,\n    description: 'Connect bank accounts'\n  },\n  {\n    name: 'Settings',\n    href: '/settings',\n    icon: Settings,\n    description: 'Application settings'\n  }\n]\n\nexport function Sidebar({ isOpen = true, onClose, className }: SidebarProps) {\n  const pathname = usePathname()\n  const [expandedItems, setExpandedItems] = React.useState<string[]>(['Reports'])\n\n  const toggleExpanded = (name: string) => {\n    setExpandedItems(prev => \n      prev.includes(name) \n        ? prev.filter(item => item !== name)\n        : [...prev, name]\n    )\n  }\n\n  const isActive = (href: string) => {\n    if (href === '/dashboard') {\n      return pathname === href\n    }\n    return pathname.startsWith(href)\n  }\n\n  return (\n    <>\n      {/* Mobile overlay */}\n      {isOpen && (\n        <div \n          className=\"fixed inset-0 z-40 bg-black/50 md:hidden\" \n          onClick={onClose}\n        />\n      )}\n      \n      {/* Sidebar */}\n      <aside \n        className={cn(\n          'fixed top-0 left-0 z-50 h-full w-64 transform border-r bg-background transition-transform duration-200 ease-in-out md:relative md:translate-x-0',\n          isOpen ? 'translate-x-0' : '-translate-x-full',\n          className\n        )}\n      >\n        {/* Mobile close button */}\n        <div className=\"flex h-14 items-center justify-between border-b px-4 md:hidden\">\n          <div className=\"flex items-center space-x-2\">\n            <div className=\"h-8 w-8 rounded bg-primary-600 flex items-center justify-center\">\n              <span className=\"text-white font-bold text-sm\">M</span>\n            </div>\n            <span className=\"font-bold\">Manna Financial</span>\n          </div>\n          <Button variant=\"ghost\" size=\"icon\" onClick={onClose}>\n            <X className=\"h-5 w-5\" />\n          </Button>\n        </div>\n\n        {/* Navigation */}\n        <nav className=\"flex-1 space-y-1 p-4\">\n          {navigation.map((item) => {\n            const isItemActive = isActive(item.href)\n            const isExpanded = expandedItems.includes(item.name)\n            const hasSubItems = item.subItems && item.subItems.length > 0\n\n            return (\n              <div key={item.name}>\n                {hasSubItems ? (\n                  <button\n                    onClick={() => toggleExpanded(item.name)}\n                    className={cn(\n                      'flex w-full items-center justify-between rounded-md px-3 py-2 text-sm font-medium transition-colors',\n                      isItemActive\n                        ? 'bg-primary-100 text-primary-700'\n                        : 'text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900'\n                    )}\n                  >\n                    <div className=\"flex items-center\">\n                      <item.icon className=\"mr-3 h-5 w-5\" />\n                      {item.name}\n                    </div>\n                    <svg\n                      className={cn(\n                        'h-4 w-4 transition-transform',\n                        isExpanded ? 'rotate-90' : ''\n                      )}\n                      fill=\"none\"\n                      stroke=\"currentColor\"\n                      viewBox=\"0 0 24 24\"\n                    >\n                      <path\n                        strokeLinecap=\"round\"\n                        strokeLinejoin=\"round\"\n                        strokeWidth={2}\n                        d=\"M9 5l7 7-7 7\"\n                      />\n                    </svg>\n                  </button>\n                ) : (\n                  <Link\n                    href={item.href}\n                    onClick={() => onClose?.()}\n                    className={cn(\n                      'flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors',\n                      isItemActive\n                        ? 'bg-primary-100 text-primary-700'\n                        : 'text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900'\n                    )}\n                  >\n                    <item.icon className=\"mr-3 h-5 w-5\" />\n                    {item.name}\n                  </Link>\n                )}\n\n                {/* Sub-items */}\n                {hasSubItems && isExpanded && (\n                  <div className=\"ml-6 mt-1 space-y-1\">\n                    {item.subItems!.map((subItem) => {\n                      const isSubItemActive = isActive(subItem.href)\n                      return (\n                        <Link\n                          key={subItem.name}\n                          href={subItem.href}\n                          onClick={() => onClose?.()}\n                          className={cn(\n                            'flex items-center rounded-md px-3 py-2 text-sm transition-colors',\n                            isSubItemActive\n                              ? 'bg-primary-50 text-primary-600 font-medium'\n                              : 'text-neutral-500 hover:bg-neutral-50 hover:text-neutral-700'\n                          )}\n                        >\n                          <subItem.icon className=\"mr-3 h-4 w-4\" />\n                          {subItem.name}\n                        </Link>\n                      )\n                    })}\n                  </div>\n                )}\n              </div>\n            )\n          })}\n        </nav>\n\n        {/* Footer */}\n        <div className=\"border-t p-4\">\n          <div className=\"text-xs text-muted-foreground\">\n            <p>Manna Financial Platform</p>\n            <p>Version 1.0.0</p>\n          </div>\n        </div>\n      </aside>\n    </>\n  )\n}"
+'use client'
+
+import React from 'react'
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+import { cn } from '../../lib/utils'
+import {
+  LayoutDashboard,
+  CreditCard,
+  Building2,
+  FileText,
+  Settings,
+  PieChart,
+  TrendingUp,
+  Wallet,
+  Receipt,
+  Calculator,
+  X
+} from 'lucide-react'
+import { Button } from '../ui/button'
+
+interface SidebarProps {
+  isOpen?: boolean
+  onClose?: () => void
+  className?: string
+}
+
+const navigation = [
+  {
+    name: 'Dashboard',
+    href: '/dashboard',
+    icon: LayoutDashboard,
+    description: 'Overview and key metrics'
+  },
+  {
+    name: 'Transactions',
+    href: '/transactions',
+    icon: Receipt,
+    description: 'View and manage transactions'
+  },
+  {
+    name: 'Accounts',
+    href: '/accounts',
+    icon: Building2,
+    description: 'Bank and credit accounts'
+  },
+  {
+    name: 'Categories',
+    href: '/categories',
+    icon: Calculator,
+    description: 'Transaction categorization'
+  },
+  {
+    name: 'Reports',
+    href: '/reports',
+    icon: FileText,
+    description: 'Financial reports and analysis',
+    subItems: [
+      {
+        name: 'P&L Statement',
+        href: '/reports/pl',
+        icon: TrendingUp
+      },
+      {
+        name: 'Balance Sheet',
+        href: '/reports/balance-sheet',
+        icon: PieChart
+      },
+      {
+        name: 'Cash Flow',
+        href: '/reports/cash-flow',
+        icon: Wallet
+      }
+    ]
+  },
+  {
+    name: 'Plaid Integration',
+    href: '/plaid',
+    icon: CreditCard,
+    description: 'Connect bank accounts'
+  },
+  {
+    name: 'Settings',
+    href: '/settings',
+    icon: Settings,
+    description: 'Application settings'
+  }
+]
+
+export function Sidebar({ isOpen = true, onClose, className }: SidebarProps) {
+  const pathname = usePathname()
+  const [expandedItems, setExpandedItems] = React.useState<string[]>(['Reports'])
+
+  const toggleExpanded = (name: string) => {
+    setExpandedItems(prev =>
+      prev.includes(name)
+        ? prev.filter(item => item !== name)
+        : [...prev, name]
+    )
+  }
+
+  const isActive = (href: string) => {
+    if (href === '/dashboard') {
+      return pathname === href
+    }
+    return pathname.startsWith(href)
+  }
+
+  return (
+    <>
+      {/* Mobile overlay */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 md:hidden"
+          onClick={onClose}
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside
+        className={cn(
+          'fixed top-0 left-0 z-50 h-full w-64 transform border-r bg-background transition-transform duration-200 ease-in-out md:relative md:translate-x-0',
+          isOpen ? 'translate-x-0' : '-translate-x-full',
+          className
+        )}
+      >
+        {/* Mobile close button */}
+        <div className="flex h-14 items-center justify-between border-b px-4 md:hidden">
+          <div className="flex items-center space-x-2">
+            <div className="h-8 w-8 rounded bg-primary-600 flex items-center justify-center">
+              <span className="text-white font-bold text-sm">M</span>
+            </div>
+            <span className="font-bold">Manna Financial</span>
+          </div>
+          <Button variant="ghost" size="icon" onClick={onClose}>
+            <X className="h-5 w-5" />
+          </Button>
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 space-y-1 p-4">
+          {navigation.map((item) => {
+            const isItemActive = isActive(item.href)
+            const isExpanded = expandedItems.includes(item.name)
+            const hasSubItems = item.subItems && item.subItems.length > 0
+
+            return (
+              <div key={item.name}>
+                {hasSubItems ? (
+                  <button
+                    onClick={() => toggleExpanded(item.name)}
+                    className={cn(
+                      'flex w-full items-center justify-between rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                      isItemActive
+                        ? 'bg-primary-100 text-primary-700'
+                        : 'text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900'
+                    )}
+                  >
+                    <div className="flex items-center">
+                      <item.icon className="mr-3 h-5 w-5" />
+                      {item.name}
+                    </div>
+                    <svg
+                      className={cn(
+                        'h-4 w-4 transition-transform',
+                        isExpanded ? 'rotate-90' : ''
+                      )}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 5l7 7-7 7"
+                      />
+                    </svg>
+                  </button>
+                ) : (
+                  <Link
+                    href={item.href}
+                    onClick={() => onClose?.()}
+                    className={cn(
+                      'flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                      isItemActive
+                        ? 'bg-primary-100 text-primary-700'
+                        : 'text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900'
+                    )}
+                  >
+                    <item.icon className="mr-3 h-5 w-5" />
+                    {item.name}
+                  </Link>
+                )}
+
+                {/* Sub-items */}
+                {hasSubItems && isExpanded && (
+                  <div className="ml-6 mt-1 space-y-1">
+                    {item.subItems!.map((subItem) => {
+                      const isSubItemActive = isActive(subItem.href)
+                      return (
+                        <Link
+                          key={subItem.name}
+                          href={subItem.href}
+                          onClick={() => onClose?.()}
+                          className={cn(
+                            'flex items-center rounded-md px-3 py-2 text-sm transition-colors',
+                            isSubItemActive
+                              ? 'bg-primary-50 text-primary-600 font-medium'
+                              : 'text-neutral-500 hover:bg-neutral-50 hover:text-neutral-700'
+                          )}
+                        >
+                          <subItem.icon className="mr-3 h-4 w-4" />
+                          {subItem.name}
+                        </Link>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </nav>
+
+        {/* Footer */}
+        <div className="border-t p-4">
+          <div className="text-xs text-muted-foreground">
+            <p>Manna Financial Platform</p>
+            <p>Version 1.0.0</p>
+          </div>
+        </div>
+      </aside>
+    </>
+  )
+}

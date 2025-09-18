@@ -5,8 +5,8 @@ from datetime import datetime, timedelta
 import uuid
 from sqlalchemy.orm import Session
 
-from ..models import (
-    User, Institution, Category, Account, Transaction, 
+from src.database.models import (
+    User, Institution, Category, Account, Transaction,
     CategorizationRule, Budget, BudgetItem
 )
 

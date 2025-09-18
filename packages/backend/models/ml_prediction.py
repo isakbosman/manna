@@ -2,7 +2,7 @@
 
 from sqlalchemy import (
     Column, String, Numeric, DateTime, Text, ForeignKey, Index,
-    CheckConstraint, Boolean
+    CheckConstraint, Boolean, Integer
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB

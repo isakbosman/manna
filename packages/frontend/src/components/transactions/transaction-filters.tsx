@@ -1,15 +1,15 @@
 import React from 'react'
-import { 
-  CalendarIcon, 
-  DollarSignIcon, 
-  FilterIcon, 
+import {
+  CalendarIcon,
+  DollarSignIcon,
+  FilterIcon,
   XIcon,
   SearchIcon,
-  BanknotesIcon
+  WalletIcon
 } from 'lucide-react'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
-import { CustomSelect } from '../ui/select'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
 import { Badge } from '../ui/badge'
 import { TransactionFilters as ITransactionFilters, Account, Category } from '@/lib/api'
 import { cn } from '../../lib/utils'
@@ -69,7 +69,7 @@ export function TransactionFilters({
   const accountOptions = accounts.map(account => ({
     value: account.id,
     label: `${account.name} (${account.subtype})`,
-    icon: <BanknotesIcon className="h-4 w-4" />
+    icon: <WalletIcon className="h-4 w-4" />
   }))
 
   const categoryOptions = categories.map(category => ({
@@ -109,22 +109,36 @@ export function TransactionFilters({
 
         {/* Account Filter */}
         <div className="w-48">
-          <CustomSelect
-            options={[{ value: '', label: 'All Accounts' }, ...accountOptions]}
-            value={filters.account_id || ''}
-            onChange={(value) => handleFilterChange('account_id', value)}
-            placeholder="Select account"
-          />
+          <Select value={filters.account_id || 'all'} onValueChange={(value) => handleFilterChange('account_id', value === 'all' ? '' : value)}>
+            <SelectTrigger>
+              <SelectValue placeholder="All Accounts" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Accounts</SelectItem>
+              {accountOptions.map(option => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Category Filter */}
         <div className="w-48">
-          <CustomSelect
-            options={[{ value: '', label: 'All Categories' }, ...categoryOptions]}
-            value={filters.category || ''}
-            onChange={(value) => handleFilterChange('category', value)}
-            placeholder="Select category"
-          />
+          <Select value={filters.category || 'all'} onValueChange={(value) => handleFilterChange('category', value === 'all' ? '' : value)}>
+            <SelectTrigger>
+              <SelectValue placeholder="All Categories" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              {categoryOptions.map(option => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Advanced Toggle */}
@@ -235,17 +249,27 @@ export function TransactionFilters({
               <label className="block text-sm font-medium text-neutral-700 mb-1">
                 Status
               </label>
-              <CustomSelect
-                options={statusOptions}
+              <Select
                 value={filters.is_pending === undefined ? 'all' : filters.is_pending.toString()}
-                onChange={(value) => {
+                onValueChange={(value) => {
                   if (value === 'all') {
                     handleFilterChange('is_pending', undefined)
                   } else {
                     handleFilterChange('is_pending', value === 'true')
                   }
                 }}
-              />
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {statusOptions.map(option => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </div>
