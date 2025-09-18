@@ -39,7 +39,7 @@ class Category(Base, UUIDMixin, TimestampMixin):
     default_budget_percentage = Column(Integer)  # Percentage of total budget
     
     # Metadata
-    metadata = Column(JSONB, default=dict)
+    extra_data = Column(JSONB, default=dict)
     
     # Relationships
     user = relationship("User")

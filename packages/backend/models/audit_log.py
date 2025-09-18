@@ -1,7 +1,7 @@
 """Audit log model for tracking system changes and user actions."""
 
 from sqlalchemy import (
-    Column, String, DateTime, Text, ForeignKey, Index, Integer
+    Column, String, DateTime, Text, ForeignKey, Index, Integer, Boolean
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB, INET
@@ -45,7 +45,7 @@ class AuditLog(Base, UUIDMixin, TimestampMixin):
     financial_impact = Column(Boolean, default=False)  # Affects financial data
     
     # Additional metadata
-    metadata = Column(JSONB, default=dict)
+    extra_data = Column(JSONB, default=dict)
     tags = Column(JSONB, default=list)  # Searchable tags
     
     # Error information

@@ -52,7 +52,7 @@ class Account(Base, UUIDMixin, TimestampMixin):
     error_message = Column(Text)
     
     # Metadata
-    metadata = Column(JSONB, default=dict)
+    extra_data = Column(JSONB, default=dict)
     
     # Relationships
     user = relationship("User", back_populates="accounts")

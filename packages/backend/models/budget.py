@@ -47,7 +47,7 @@ class Budget(Base, UUIDMixin, TimestampMixin):
     
     # Metadata
     tags = Column(JSONB, default=list)
-    metadata = Column(JSONB, default=dict)
+    extra_data = Column(JSONB, default=dict)
     
     # Relationships
     user = relationship("User", back_populates="budgets")
@@ -137,7 +137,7 @@ class BudgetItem(Base, UUIDMixin, TimestampMixin):
     
     # Metadata
     notes = Column(Text)
-    metadata = Column(JSONB, default=dict)
+    extra_data = Column(JSONB, default=dict)
     
     # Relationships
     budget = relationship("Budget", back_populates="budget_items")

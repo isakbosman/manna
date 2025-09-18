@@ -30,7 +30,7 @@ class Institution(Base, UUIDMixin, TimestampMixin):
     oauth_required = Column(Boolean, default=False)
     
     # Metadata
-    metadata = Column(JSONB, default=dict)
+    extra_data = Column(JSONB, default=dict)
     
     # Relationships
     accounts = relationship("Account", back_populates="institution")

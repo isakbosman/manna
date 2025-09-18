@@ -9,20 +9,9 @@ from sqlalchemy.orm import relationship, Session
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from .base import Base, UUIDMixin, TimestampMixin
 
-# Import security enhancements
-try:
-    from ..src.core.encryption import EncryptedString
-    from ..src.core.locking import OptimisticLockMixin
-except ImportError:
-    try:
-        # Try without the .. prefix
-        from src.core.encryption import EncryptedString
-        from src.core.locking import OptimisticLockMixin
-    except ImportError:
-        # Fallback for when core modules are not available
-        EncryptedString = String
-        class OptimisticLockMixin:
-            pass
+# Import security enhancements with proper path
+from src.core.encryption import EncryptedString
+from src.core.locking import OptimisticLockMixin
 
 
 class PlaidItem(Base, UUIDMixin, TimestampMixin, OptimisticLockMixin):

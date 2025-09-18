@@ -2,7 +2,7 @@
 
 from sqlalchemy import (
     Column, String, Boolean, DateTime, Text, ForeignKey, Index,
-    CheckConstraint
+    CheckConstraint, Integer
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB, INET
@@ -48,7 +48,7 @@ class UserSession(Base, UUIDMixin, TimestampMixin):
     login_method = Column(String(50))  # password, oauth, sso, api_key
     
     # Additional metadata
-    metadata = Column(JSONB, default=dict)
+    extra_data = Column(JSONB, default=dict)
     
     # Relationships
     user = relationship("User", back_populates="user_sessions")

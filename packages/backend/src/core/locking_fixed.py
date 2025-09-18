@@ -16,7 +16,8 @@ from sqlalchemy.ext.declarative import declared_attr
 from sqlalchemy.orm import Session, Mapper
 from sqlalchemy.orm.attributes import instance_state, NO_VALUE
 from sqlalchemy.orm.state import InstanceState
-from sqlalchemy.exc import SQLAlchemyError, StaleDataError
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm.exc import StaleDataError
 import redis
 
 from ..config import settings

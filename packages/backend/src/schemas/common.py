@@ -45,13 +45,15 @@ class PaginatedResponse(BaseModel, Generic[T]):
 
 
 class HealthCheck(BaseModel):
-    """Health check response."""
+    """Enhanced health check response with security status."""
     status: str = Field(description="Service status")
     timestamp: datetime = Field(description="Current timestamp")
     environment: str = Field(description="Current environment")
     version: str = Field(description="API version")
     database: bool = Field(description="Database connection status")
     redis: bool = Field(description="Redis connection status")
+    security: Optional[dict] = Field(None, description="Security status information")
+    database_details: Optional[dict] = Field(None, description="Detailed database health info")
     
     model_config = ConfigDict(
         from_attributes=True,
@@ -62,7 +64,13 @@ class HealthCheck(BaseModel):
                 "environment": "development",
                 "version": "1.0.0",
                 "database": True,
-                "redis": True
+                "redis": True,
+                "security": {
+                    "encryption_enabled": True,
+                    "security_headers": True,
+                    "rate_limiting": True,
+                    "audit_logging": True
+                }
             }
         }
     )

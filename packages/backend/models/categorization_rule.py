@@ -56,7 +56,7 @@ class CategorizationRule(Base, UUIDMixin, TimestampMixin):
     
     # Metadata
     tags = Column(JSONB, default=list)
-    metadata = Column(JSONB, default=dict)
+    extra_data = Column(JSONB, default=dict)
     
     # Relationships
     user = relationship("User")

@@ -1,4 +1,4 @@
-// File: /Users/isak/dev/accounts/packages/frontend/src/app/transactions/page.tsx
+// File: /Users/isak/dev/manna/packages/frontend/src/app/transactions/page.tsx
 import * as entry from '../../../../src/app/transactions/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 

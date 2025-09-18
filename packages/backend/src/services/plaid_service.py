@@ -23,6 +23,9 @@ from plaid.exceptions import ApiException
 
 from ..config import settings
 from ..database.models import PlaidItem, Account, Transaction
+from ..core.locking import safe_cursor_update, plaid_sync_lock, OptimisticLockError, DistributedLockError
+from ..core.audit import log_audit_event, AuditEventType, create_audit_context
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
@@ -125,13 +128,14 @@ class PlaidService:
             logger.error(f"Failed to create link token: {e}")
             raise Exception(f"Failed to create Plaid link token: {str(e)}")
     
-    async def exchange_public_token(self, public_token: str) -> str:
+    async def exchange_public_token(self, public_token: str, user_id: str = None) -> str:
         """
-        Exchange a public token for an access token.
-        
+        Exchange a public token for an access token with audit logging.
+
         Args:
             public_token: Public token from Plaid Link
-            
+            user_id: Optional user ID for audit logging
+
         Returns:
             Access token for API requests
         """
@@ -139,28 +143,52 @@ class PlaidService:
             request = ItemPublicTokenExchangeRequest(
                 public_token=public_token
             )
-            
+
             response = self.client.item_public_token_exchange(request)
-            
+
             logger.info(f"Public token exchanged successfully")
-            
+
+            # Log the token exchange event
+            context = create_audit_context(user_id=user_id)
+            log_audit_event(
+                AuditEventType.PLAID_ITEM_CONNECT,
+                "Plaid public token exchanged for access token",
+                context,
+                metadata={"item_id": response.get('item_id')}
+            )
+
             return response['access_token']
-            
+
         except ApiException as e:
             logger.error(f"Failed to exchange public token: {e}")
+
+            # Log the failure
+            if user_id:
+                context = create_audit_context(user_id=user_id)
+                log_audit_event(
+                    AuditEventType.PLAID_ITEM_CONNECT,
+                    "Failed to exchange Plaid public token",
+                    context,
+                    success=False,
+                    error_message=str(e)
+                )
+
             raise Exception(f"Failed to exchange public token: {str(e)}")
     
-    async def get_accounts(self, access_token: str) -> List[Dict[str, Any]]:
+    async def get_accounts(self, plaid_item: PlaidItem) -> List[Dict[str, Any]]:
         """
-        Fetch accounts associated with an access token.
-        
+        Fetch accounts associated with a Plaid item.
+
         Args:
-            access_token: Plaid access token
-            
+            plaid_item: PlaidItem instance with encrypted access token
+
         Returns:
             List of account dictionaries
         """
         try:
+            # Get decrypted access token
+            access_token = plaid_item.get_decrypted_access_token()
+
             request = AccountsGetRequest(access_token=access_token)
             response = self.client.accounts_get(request)
             
@@ -266,7 +294,130 @@ class PlaidService:
         except ApiException as e:
             logger.error(f"Failed to get transactions: {e}")
             raise Exception(f"Failed to fetch transactions: {str(e)}")
-    
+
+    async def sync_transactions_secure(
+        self,
+        session: Session,
+        plaid_item: PlaidItem,
+        count: int = 500,
+        max_retries: int = 3
+    ) -> Dict[str, Any]:
+        """
+        Securely sync transactions using encrypted PlaidItem with distributed locking.
+
+        Args:
+            session: Database session
+            plaid_item: PlaidItem instance with encrypted access token
+            count: Number of transactions per page (max 500)
+            max_retries: Maximum number of retries for transient errors
+
+        Returns:
+            Dict containing added/modified/removed transactions and new cursor
+        """
+        plaid_item_id = str(plaid_item.id)
+
+        try:
+            # Use distributed locking to prevent concurrent syncs
+            with plaid_sync_lock(plaid_item_id, timeout=60.0):
+                # Get current cursor with fresh data
+                session.refresh(plaid_item)
+                current_cursor = plaid_item.cursor
+
+                # Log sync start
+                context = create_audit_context(user_id=str(plaid_item.user_id))
+                log_audit_event(
+                    AuditEventType.PLAID_SYNC_START,
+                    f"Starting transaction sync for PlaidItem {plaid_item_id}",
+                    context,
+                    metadata={
+                        "plaid_item_id": plaid_item_id,
+                        "has_cursor": bool(current_cursor),
+                        "cursor_length": len(current_cursor) if current_cursor else 0
+                    }
+                )
+
+                # Perform the sync
+                result = await self._perform_secure_sync(
+                    plaid_item, current_cursor, count, max_retries
+                )
+
+                # Update cursor safely with optimistic locking
+                if result.get('has_more') or result.get('next_cursor'):
+                    new_cursor = result['next_cursor']
+                    if safe_cursor_update(session, plaid_item, new_cursor):
+                        logger.info(f"Successfully updated cursor for PlaidItem {plaid_item_id}")
+                    else:
+                        logger.warning(f"Failed to update cursor for PlaidItem {plaid_item_id} - concurrent modification")
+                        # Re-raise as this indicates a race condition
+                        raise OptimisticLockError("Cursor update failed due to concurrent modification")
+
+                # Log successful sync
+                log_audit_event(
+                    AuditEventType.PLAID_SYNC_COMPLETE,
+                    f"Transaction sync completed for PlaidItem {plaid_item_id}",
+                    context,
+                    metadata={
+                        "plaid_item_id": plaid_item_id,
+                        "added_count": len(result.get('added', [])),
+                        "modified_count": len(result.get('modified', [])),
+                        "removed_count": len(result.get('removed', [])),
+                        "has_more": result.get('has_more', False)
+                    }
+                )
+
+                return result
+
+        except DistributedLockError as e:
+            logger.error(f"Could not acquire sync lock for PlaidItem {plaid_item_id}: {e}")
+            raise Exception(f"Sync already in progress for this account")
+
+        except OptimisticLockError as e:
+            logger.error(f"Optimistic lock failed for PlaidItem {plaid_item_id}: {e}")
+            raise Exception(f"Account was modified during sync - please retry")
+
+        except Exception as e:
+            # Log sync error
+            context = create_audit_context(user_id=str(plaid_item.user_id))
+            log_audit_event(
+                AuditEventType.PLAID_SYNC_ERROR,
+                f"Transaction sync failed for PlaidItem {plaid_item_id}: {str(e)}",
+                context,
+                success=False,
+                error_message=str(e),
+                metadata={"plaid_item_id": plaid_item_id}
+            )
+            raise
+
+    async def _perform_secure_sync(
+        self,
+        plaid_item: PlaidItem,
+        cursor: Optional[str],
+        count: int,
+        max_retries: int
+    ) -> Dict[str, Any]:
+        """
+        Perform the actual Plaid sync with retry logic.
+
+        Args:
+            plaid_item: PlaidItem with encrypted access token
+            cursor: Current sync cursor
+            count: Number of transactions to fetch
+            max_retries: Maximum retry attempts
+
+        Returns:
+            Sync response data
+        """
+        # Get decrypted access token
+        access_token = plaid_item.get_decrypted_access_token()
+
+        # Use the existing sync logic but with the decrypted token
+        return await self.sync_transactions(
+            access_token=access_token,
+            cursor=cursor,
+            count=count,
+            max_retries=max_retries
+        )
+
     async def sync_transactions(
         self,
         access_token: str,
