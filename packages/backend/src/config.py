@@ -32,6 +32,7 @@ class Settings(BaseSettings):
         default="postgresql://postgres@localhost:5432/manna",
         env="DATABASE_URL"
     )
+    database_password: Optional[str] = Field(default=None, env="DATABASE_PASSWORD")
     database_echo: bool = Field(default=False, env="DATABASE_ECHO")
     database_pool_size: int = Field(default=5, env="DATABASE_POOL_SIZE")
     database_max_overflow: int = Field(default=10, env="DATABASE_MAX_OVERFLOW")
@@ -48,6 +49,11 @@ class Settings(BaseSettings):
         default="development-secret-key-change-in-production",
         env="SECRET_KEY"
     )
+    encryption_key: Optional[str] = Field(default=None, env="MANNA_ENCRYPTION_KEY")
+    encryption_key_aes256: Optional[str] = Field(default=None, env="MANNA_ENCRYPTION_KEY_AES256")
+    jwt_signing_key: Optional[str] = Field(default=None, env="JWT_SIGNING_KEY")
+    require_https: bool = Field(default=False, env="REQUIRE_HTTPS")
+    secure_cookies: bool = Field(default=False, env="SECURE_COOKIES")
     jwt_algorithm: str = Field(default="HS256", env="JWT_ALGORITHM")
     jwt_expiration_minutes: int = Field(default=30, env="JWT_EXPIRATION_MINUTES")
     jwt_refresh_expiration_days: int = Field(default=7, env="JWT_REFRESH_EXPIRATION_DAYS")
@@ -87,6 +93,14 @@ class Settings(BaseSettings):
     
     # Logging Settings
     log_level: str = Field(default="INFO", env="LOG_LEVEL")
+
+    # Security Audit Settings
+    audit_logging_enabled: bool = Field(default=True, env="AUDIT_LOGGING_ENABLED")
+    security_headers_enabled: bool = Field(default=True, env="SECURITY_HEADERS_ENABLED")
+    rate_limiting_enabled: bool = Field(default=True, env="RATE_LIMITING_ENABLED")
+
+    # Encryption Settings
+    field_encryption_enabled: bool = Field(default=True, env="FIELD_ENCRYPTION_ENABLED")
     log_format: str = Field(
         default="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         env="LOG_FORMAT"
@@ -118,6 +132,31 @@ class Settings(BaseSettings):
         if values.get("environment") == "production" and v == "development-secret-key-change-in-production":
             raise ValueError("Secret key must be changed in production!")
         return v
+
+    @validator("database_url")
+    def validate_database_url(cls, v, values):
+        """Validate database URL security."""
+        if values.get("environment") == "production":
+            # Check for blank password in production
+            if ":@" in v:
+                raise ValueError("Database password required in production")
+            # Require SSL in production
+            if not any(param in v for param in ["sslmode=require", "sslmode=prefer"]):
+                import logging
+                logging.getLogger(__name__).warning(
+                    "SSL not explicitly configured for production database"
+                )
+        return v
+
+    @validator("require_https")
+    def validate_https(cls, v, values):
+        """Require HTTPS in production."""
+        if values.get("environment") == "production" and not v:
+            import logging
+            logging.getLogger(__name__).warning(
+                "HTTPS not required in production - this is insecure"
+            )
+        return v
     
     class Config:
         """Pydantic config."""
@@ -133,6 +172,10 @@ class Settings(BaseSettings):
             if field_name in ["allowed_origins", "plaid_products", "plaid_country_codes"]:
                 # Parse comma-separated lists
                 return [x.strip() for x in raw_val.split(",")]
+            # Parse boolean values
+            if field_name in ["require_https", "secure_cookies", "audit_logging_enabled",
+                              "security_headers_enabled", "rate_limiting_enabled", "field_encryption_enabled"]:
+                return raw_val.lower() in ("true", "1", "yes", "on")
             return raw_val
 
 

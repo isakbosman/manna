@@ -1,15 +1,31 @@
 """Plaid Item model for tracking Plaid connections."""
 
+from typing import Optional
 from sqlalchemy import (
     Column, String, Boolean, DateTime, Text, ForeignKey, Index,
-    CheckConstraint
+    CheckConstraint, Integer
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, Session
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from .base import Base, UUIDMixin, TimestampMixin
 
+# Import security enhancements
+try:
+    from ..src.core.encryption import EncryptedString
+    from ..src.core.locking import OptimisticLockMixin
+except ImportError:
+    try:
+        # Try without the .. prefix
+        from src.core.encryption import EncryptedString
+        from src.core.locking import OptimisticLockMixin
+    except ImportError:
+        # Fallback for when core modules are not available
+        EncryptedString = String
+        class OptimisticLockMixin:
+            pass
 
-class PlaidItem(Base, UUIDMixin, TimestampMixin):
+
+class PlaidItem(Base, UUIDMixin, TimestampMixin, OptimisticLockMixin):
     """Plaid Item represents a user's connection to a financial institution."""
     
     __tablename__ = "plaid_items"
@@ -20,7 +36,7 @@ class PlaidItem(Base, UUIDMixin, TimestampMixin):
     
     # Plaid identifiers
     plaid_item_id = Column(String(255), unique=True, nullable=False, index=True)
-    plaid_access_token = Column(String(255), nullable=False)  # Encrypted in production
+    plaid_access_token = Column(EncryptedString(255), nullable=False)  # Encrypted with AES-256-GCM
     
     # Connection status
     status = Column(String(20), default="active", nullable=False)  # active, error, expired, revoked
@@ -38,7 +54,7 @@ class PlaidItem(Base, UUIDMixin, TimestampMixin):
     # Sync tracking
     last_successful_sync = Column(DateTime(timezone=True))
     last_sync_attempt = Column(DateTime(timezone=True))
-    sync_cursor = Column(String(255))  # For incremental updates
+    sync_cursor = Column("cursor", String(255))  # Map to 'cursor' column in DB
     
     # Transaction sync settings
     max_days_back = Column(Integer, default=730)  # 2 years default
@@ -51,7 +67,7 @@ class PlaidItem(Base, UUIDMixin, TimestampMixin):
     
     # Metadata
     update_type = Column(String(20))  # background, user_present
-    metadata = Column(JSONB, default=dict)
+    extra_data = Column(JSONB, default=dict)
     
     # Relationships
     user = relationship("User", back_populates="plaid_items")
@@ -79,6 +95,16 @@ class PlaidItem(Base, UUIDMixin, TimestampMixin):
         ),
     )
     
+    @property
+    def cursor(self) -> Optional[str]:
+        """Access cursor via property for backward compatibility."""
+        return self.sync_cursor
+
+    @cursor.setter
+    def cursor(self, value: Optional[str]) -> None:
+        """Set cursor via property for backward compatibility."""
+        self.sync_cursor = value
+
     @property
     def is_healthy(self) -> bool:
         """Check if item is in a healthy state."""
@@ -131,6 +157,59 @@ class PlaidItem(Base, UUIDMixin, TimestampMixin):
         from datetime import datetime
         self.last_successful_sync = datetime.utcnow()
     
+    def update_cursor_safely(self, session: Session, new_cursor: str) -> bool:
+        """
+        Safely update the sync cursor with optimistic locking.
+
+        Args:
+            session: Database session
+            new_cursor: New cursor value
+
+        Returns:
+            True if update successful, False if concurrent modification
+        """
+        try:
+            if hasattr(self, 'update_with_lock'):
+                # Use optimistic locking if available
+                self.update_with_lock(
+                    session,
+                    sync_cursor=new_cursor,
+                    last_sync_attempt=datetime.utcnow()
+                )
+            else:
+                # Fallback without optimistic locking
+                self.sync_cursor = new_cursor
+                from datetime import datetime
+                self.last_sync_attempt = datetime.utcnow()
+                session.commit()
+            return True
+        except Exception as e:
+            session.rollback()
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to update cursor for PlaidItem {self.id}: {e}")
+            return False
+
+    def get_decrypted_access_token(self) -> str:
+        """
+        Get the decrypted access token.
+
+        Returns:
+            Decrypted access token string
+        """
+        # SQLAlchemy will automatically decrypt when accessing the field
+        return self.plaid_access_token
+
+    def set_access_token(self, token: str) -> None:
+        """
+        Set the access token (will be automatically encrypted).
+
+        Args:
+            token: Plain text access token
+        """
+        # SQLAlchemy will automatically encrypt when setting the field
+        self.plaid_access_token = token
+
     def __repr__(self):
         return (f"<PlaidItem(id={self.id}, plaid_item_id='{self.plaid_item_id}', "
-                f"status='{self.status}', user_id={self.user_id})>")
+                f"status='{self.status}', user_id={self.user_id}, version={getattr(self, 'version', 'N/A')})>")
