@@ -270,47 +270,129 @@ class PlaidService:
     async def sync_transactions(
         self,
         access_token: str,
-        cursor: Optional[str] = None
+        cursor: Optional[str] = None,
+        count: int = 500,
+        max_retries: int = 3
     ) -> Dict[str, Any]:
         """
         Sync transactions using Plaid's transactions sync endpoint.
-        More efficient for incremental updates.
-        
+        Enhanced with comprehensive error handling and pagination support.
+
         Args:
             access_token: Plaid access token
-            cursor: Sync cursor from previous request
-            
+            cursor: Sync cursor from previous request (None/empty for initial sync)
+            count: Number of transactions per page (max 500)
+            max_retries: Maximum number of retries for transient errors
+
         Returns:
             Dict containing added/modified/removed transactions and new cursor
         """
-        try:
-            # Build request parameters - cursor is optional
-            request_params = {"access_token": access_token}
-            if cursor:
-                request_params["cursor"] = cursor
+        retry_count = 0
+        last_error = None
 
-            request = TransactionsSyncRequest(**request_params)
-            
-            response = self.client.transactions_sync(request)
-            
-            logger.info(
-                f"Synced transactions - Added: {len(response['added'])}, "
-                f"Modified: {len(response['modified'])}, "
-                f"Removed: {len(response['removed'])}"
-            )
-            
-            return {
-                "added": response['added'],
-                "modified": response['modified'],
-                "removed": response['removed'],
-                "next_cursor": response['next_cursor'],
-                "has_more": response['has_more'],
-                "request_id": response['request_id']
-            }
-            
-        except ApiException as e:
-            logger.error(f"Failed to sync transactions: {e}")
-            raise Exception(f"Failed to sync transactions: {str(e)}")
+        while retry_count <= max_retries:
+            try:
+                # Build request parameters
+                request_params = {
+                    "access_token": access_token,
+                    "count": min(count, 500)  # Ensure we don't exceed max
+                }
+
+                # CRITICAL FIX: Only add cursor if it's not None AND not empty string
+                # Plaid treats empty string differently from no cursor parameter
+                if cursor is not None and cursor.strip() != "":
+                    request_params["cursor"] = cursor
+                    logger.info(f"Performing incremental sync with cursor: {cursor[:20]}... (attempt {retry_count + 1})")
+                else:
+                    logger.info(f"Performing initial sync (no cursor provided or empty) (attempt {retry_count + 1})")
+
+                request = TransactionsSyncRequest(**request_params)
+                response = self.client.transactions_sync(request)
+
+                # Process response data
+                added_txns = response.get('added', [])
+                modified_txns = response.get('modified', [])
+                removed_txns = response.get('removed', [])
+
+                logger.info(
+                    f"Synced transactions - Added: {len(added_txns)}, "
+                    f"Modified: {len(modified_txns)}, "
+                    f"Removed: {len(removed_txns)}, "
+                    f"Has more: {response.get('has_more', False)}"
+                )
+
+                # Convert Plaid transaction objects to dictionaries for processing
+                def convert_transaction(txn):
+                    """Convert Plaid transaction object to dictionary."""
+                    if hasattr(txn, 'to_dict'):
+                        return txn.to_dict()
+                    elif isinstance(txn, dict):
+                        return txn
+                    else:
+                        # Convert object attributes to dict
+                        return {
+                            'transaction_id': getattr(txn, 'transaction_id', None),
+                            'account_id': getattr(txn, 'account_id', None),
+                            'amount': getattr(txn, 'amount', 0),
+                            'iso_currency_code': getattr(txn, 'iso_currency_code', 'USD'),
+                            'category': getattr(txn, 'category', []),
+                            'category_id': getattr(txn, 'category_id', None),
+                            'date': getattr(txn, 'date', None),
+                            'authorized_date': getattr(txn, 'authorized_date', None),
+                            'name': getattr(txn, 'name', ''),
+                            'merchant_name': getattr(txn, 'merchant_name', None),
+                            'payment_channel': getattr(txn, 'payment_channel', None),
+                            'pending': getattr(txn, 'pending', False),
+                            'pending_transaction_id': getattr(txn, 'pending_transaction_id', None),
+                            'location': getattr(txn, 'location', None),
+                            'account_owner': getattr(txn, 'account_owner', None)
+                        }
+
+                return {
+                    "added": [convert_transaction(txn) for txn in added_txns],
+                    "modified": [convert_transaction(txn) for txn in modified_txns],
+                    "removed": [convert_transaction(txn) for txn in removed_txns],
+                    "next_cursor": response.get('next_cursor'),
+                    "has_more": response.get('has_more', False),
+                    "request_id": response.get('request_id'),
+                    # Additional metadata for debugging
+                    "is_initial_sync": cursor is None or cursor.strip() == "",
+                    "page_size": count,
+                    "retry_count": retry_count
+                }
+
+            except ApiException as e:
+                error_code = getattr(e, 'code', None)
+                error_message = str(e)
+                last_error = e
+
+                # Log detailed error information
+                logger.error(f"Plaid sync error (attempt {retry_count + 1}/{max_retries + 1}) - Code: {error_code}, Message: {error_message}")
+
+                # Check for specific error codes that shouldn't be retried
+                if error_code == 'TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION':
+                    raise Exception(f"TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION: {error_message}")
+                elif error_code in ['ITEM_LOGIN_REQUIRED', 'ACCESS_NOT_GRANTED', 'INVALID_ACCESS_TOKEN']:
+                    raise Exception(f"Authentication required: {error_message}")
+                elif error_code in ['INVALID_REQUEST', 'INVALID_INPUT']:
+                    raise Exception(f"Invalid request: {error_message}")
+
+                # For transient errors, retry with exponential backoff
+                if retry_count < max_retries:
+                    import asyncio
+                    wait_time = 2 ** retry_count  # Exponential backoff: 1s, 2s, 4s
+                    logger.warning(f"Retrying in {wait_time} seconds...")
+                    await asyncio.sleep(wait_time)
+                    retry_count += 1
+                else:
+                    # Max retries exceeded
+                    break
+
+        # If we get here, all retries failed
+        if last_error:
+            raise Exception(f"Failed to sync transactions after {max_retries + 1} attempts: {str(last_error)}")
+        else:
+            raise Exception(f"Failed to sync transactions after {max_retries + 1} attempts: Unknown error")
     
     async def get_item(self, access_token: str) -> Dict[str, Any]:
         """
@@ -452,14 +534,17 @@ class PlaidService:
         logger.info(f"Handling webhook: {webhook_type} - {webhook_code} for item {item_id}")
         
         if webhook_type == "TRANSACTIONS":
-            if webhook_code == "INITIAL_UPDATE":
-                # Initial transaction pull complete
-                return {"status": "initial_update_received", "action": "fetch_transactions"}
+            if webhook_code == "SYNC_UPDATES_AVAILABLE":
+                # New sync updates available (replaces older webhook types)
+                return {"status": "sync_updates_available", "action": "sync_transactions"}
+            elif webhook_code == "INITIAL_UPDATE":
+                # Initial transaction pull complete (legacy)
+                return {"status": "initial_update_received", "action": "sync_transactions"}
             elif webhook_code == "HISTORICAL_UPDATE":
-                # Historical transactions ready
-                return {"status": "historical_update_received", "action": "fetch_all_transactions"}
+                # Historical transactions ready (legacy)
+                return {"status": "historical_update_received", "action": "sync_transactions"}
             elif webhook_code == "DEFAULT_UPDATE":
-                # New transactions available
+                # New transactions available (legacy)
                 return {"status": "default_update_received", "action": "sync_transactions"}
             elif webhook_code == "TRANSACTIONS_REMOVED":
                 # Transactions were removed

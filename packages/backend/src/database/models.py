@@ -104,29 +104,80 @@ class Institution(Base, TimestampMixin):
 class PlaidItem(Base, TimestampMixin):
     """Plaid Item representing a user's connection to a financial institution."""
     __tablename__ = "plaid_items"
-    
+
     id = Column(UUID(), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(), ForeignKey("users.id"), nullable=False)
     institution_id = Column(UUID(), ForeignKey("institutions.id"), nullable=True)
     plaid_item_id = Column(String(255), unique=True, nullable=False, index=True)
     access_token = Column(Text, nullable=False)  # Should be encrypted in production
-    cursor = Column(String(255))  # For transaction updates
-    consent_expiration_time = Column(DateTime(timezone=True))
+
+    # Sync tracking
+    cursor = Column(String(255))  # For transaction sync updates
     last_successful_sync = Column(DateTime(timezone=True))
-    last_failed_sync = Column(DateTime(timezone=True))
-    error = Column(Text)  # JSON error details
+    last_sync_attempt = Column(DateTime(timezone=True))
+
+    # Status and error tracking
+    status = Column(String(20), default="active", nullable=False)  # active, error, expired, revoked
+    error_code = Column(String(50))
+    error_message = Column(Text)
+    requires_reauth = Column(Boolean, default=False)
+
+    # Plaid metadata
+    consent_expiration_time = Column(DateTime(timezone=True))
     webhook_url = Column(String(500))
     available_products = Column(Text)  # JSON array of available products
     billed_products = Column(Text)  # JSON array of billed products
     is_active = Column(Boolean, default=True, nullable=False)
-    
+
     # Relationships
     user = relationship("User", back_populates="plaid_items")
     institution = relationship("Institution", back_populates="plaid_items")
     accounts = relationship("Account", back_populates="plaid_item", cascade="all, delete-orphan")
-    
+
+    # Indexes
+    __table_args__ = (
+        Index("idx_plaid_items_user_active", "user_id", "is_active"),
+        Index("idx_plaid_items_status", "status", "last_sync_attempt"),
+        Index("idx_plaid_items_reauth", "requires_reauth", "is_active"),
+    )
+
+    @property
+    def is_healthy(self) -> bool:
+        """Check if item is in a healthy state."""
+        return self.status == "active" and not self.requires_reauth and self.is_active
+
+    @property
+    def needs_attention(self) -> bool:
+        """Check if item needs user attention."""
+        return self.status in ("error", "expired") or self.requires_reauth
+
+    def mark_error(self, error_code: str, error_message: str) -> None:
+        """Mark item as having an error."""
+        self.status = "error"
+        self.error_code = error_code
+        self.error_message = error_message[:1000] if error_message else None
+
+        # Set reauth flag for certain errors
+        reauth_errors = [
+            "ITEM_LOGIN_REQUIRED",
+            "ACCESS_NOT_GRANTED",
+            "INSUFFICIENT_CREDENTIALS",
+            "INVALID_CREDENTIALS",
+            "ITEM_LOCKED"
+        ]
+        if error_code in reauth_errors:
+            self.requires_reauth = True
+
+    def mark_healthy(self) -> None:
+        """Mark item as healthy and clear error state."""
+        self.status = "active"
+        self.error_code = None
+        self.error_message = None
+        self.requires_reauth = False
+        self.last_successful_sync = datetime.utcnow()
+
     def __repr__(self):
-        return f"<PlaidItem(id={self.id}, user_id={self.user_id})>"
+        return f"<PlaidItem(id={self.id}, status={self.status}, user_id={self.user_id})>"
 
 
 class Account(Base, TimestampMixin):

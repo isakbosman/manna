@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_
 import logging
 import json
+import asyncio
 
 from ..database import get_db
 from ..database.models import User, PlaidItem, Institution, Account, Transaction
@@ -359,11 +360,12 @@ async def sync_all_transactions(
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """
-    Sync transactions for user's accounts.
+    Sync transactions for user's accounts with comprehensive error handling.
     If account_ids provided, sync only those accounts.
     Otherwise sync all active accounts.
     """
-    logger.info(f"🚀 DEBUG: sync_all_transactions called for user: {current_user.id if current_user else 'NO USER'}")
+    logger.info(f"Starting transaction sync for user: {current_user.id}")
+
     try:
         # Get plaid items to sync
         query = db.query(PlaidItem).filter(
@@ -376,7 +378,6 @@ async def sync_all_transactions(
             query = query.join(Account).filter(Account.id.in_(request.account_ids))
 
         plaid_items = query.all()
-
         logger.info(f"Found {len(plaid_items)} plaid items for user {current_user.id}")
 
         if not plaid_items:
@@ -389,123 +390,77 @@ async def sync_all_transactions(
 
         total_synced = 0
         total_new = 0
+        total_modified = 0
+        total_removed = 0
+        sync_errors = []
 
         for plaid_item in plaid_items:
             try:
-                logger.info(f"Processing Plaid item {plaid_item.id}, cursor: {plaid_item.cursor}")
+                # Use the enhanced sync function
+                result = await sync_plaid_item_transactions(
+                    plaid_item=plaid_item,
+                    db=db,
+                    user_id=current_user.id
+                )
 
-                # Always use sync - it handles both initial and incremental syncs
-                # When cursor is None, it fetches ALL historical transactions
-                has_more = True
-                current_cursor = plaid_item.cursor
+                total_synced += result["synced_count"]
+                total_new += result["new_transactions"]
+                total_modified += result["modified_transactions"]
+                total_removed += result["removed_transactions"]
 
-                logger.info(f"Starting sync with cursor: {current_cursor}")
-
-                while has_more:
-                    logger.info(f"Calling Plaid sync API with cursor: {current_cursor}")
-                    sync_result = await plaid_service.sync_transactions(
-                        plaid_item.access_token,
-                        current_cursor
-                    )
-
-                    logger.info(f"Plaid sync response: added={len(sync_result.get('added', []))}, "
-                              f"modified={len(sync_result.get('modified', []))}, "
-                              f"removed={len(sync_result.get('removed', []))}, "
-                              f"has_more={sync_result.get('has_more', False)}")
-
-                    # Process added transactions
-                    for txn_data in sync_result.get("added", []):
-                        # Get account
-                        account = db.query(Account).filter(
-                            Account.plaid_account_id == txn_data["account_id"]
-                        ).first()
-
-                        if account:
-                            # Check if transaction already exists
-                            existing = db.query(Transaction).filter(
-                                Transaction.plaid_transaction_id == txn_data["transaction_id"]
-                            ).first()
-
-                            if not existing:
-                                transaction = Transaction(
-                                    account_id=account.id,
-                                    plaid_transaction_id=txn_data["transaction_id"],
-                                    amount_cents=int(txn_data["amount"] * 100),  # Convert to cents
-                                    iso_currency_code=txn_data.get("iso_currency_code", "USD"),
-                                    date=datetime.strptime(txn_data["date"], "%Y-%m-%d").date() if isinstance(txn_data["date"], str) else txn_data["date"],
-                                    name=txn_data["name"],
-                                    merchant_name=txn_data.get("merchant_name"),
-                                    category=txn_data.get("category", []),
-                                    category_id=txn_data.get("category_id"),
-                                    primary_category=txn_data.get("category", [""])[0] if txn_data.get("category") else None,
-                                    detailed_category=txn_data.get("category", ["", ""])[-1] if txn_data.get("category") and len(txn_data.get("category")) > 1 else None,
-                                    pending=txn_data["pending"],
-                                    pending_transaction_id=txn_data.get("pending_transaction_id"),
-                                    payment_channel=txn_data.get("payment_channel"),
-                                    location=dict(txn_data["location"]) if txn_data.get("location") else None,
-                                    account_owner=txn_data.get("account_owner"),
-                                    authorized_date=datetime.strptime(txn_data.get("authorized_date"), "%Y-%m-%d").date() if txn_data.get("authorized_date") and isinstance(txn_data.get("authorized_date"), str) else txn_data.get("authorized_date")
-                                )
-                                db.add(transaction)
-                                total_new += 1
-
-                    # Process modified transactions
-                    for txn_data in sync_result.get("modified", []):
-                        transaction = db.query(Transaction).filter(
-                            Transaction.plaid_transaction_id == txn_data["transaction_id"]
-                        ).first()
-
-                        if transaction:
-                            transaction.amount_cents = int(txn_data["amount"] * 100)
-                            transaction.date = datetime.strptime(txn_data["date"], "%Y-%m-%d").date() if isinstance(txn_data["date"], str) else txn_data["date"]
-                            transaction.name = txn_data["name"]
-                            transaction.merchant_name = txn_data.get("merchant_name")
-                            transaction.category = txn_data.get("category", [])
-                            transaction.category_id = txn_data.get("category_id")
-                            transaction.primary_category = txn_data.get("category", [""])[0] if txn_data.get("category") else None
-                            transaction.detailed_category = txn_data.get("category", ["", ""])[-1] if txn_data.get("category") and len(txn_data.get("category")) > 1 else None
-                            transaction.pending = txn_data["pending"]
-                            transaction.location = dict(txn_data["location"]) if txn_data.get("location") else None
-
-                    # Process removed transactions
-                    for removed_txn in sync_result.get("removed", []):
-                        transaction = db.query(Transaction).filter(
-                            Transaction.plaid_transaction_id == removed_txn["transaction_id"]
-                        ).first()
-
-                        if transaction:
-                            db.delete(transaction)
-
-                    added = len(sync_result.get("added", []))
-                    modified = len(sync_result.get("modified", []))
-
-                    total_synced += added + modified
-
-                    # Update cursor for next iteration
-                    current_cursor = sync_result.get("next_cursor")
-                    has_more = sync_result.get("has_more", False)
-
-                # Save the final cursor after processing all pages
-                plaid_item.cursor = current_cursor
-                plaid_item.last_successful_sync = datetime.utcnow()
+                logger.info(f"Successfully synced item {plaid_item.id}: {result['synced_count']} transactions")
 
             except Exception as e:
-                logger.error(f"Failed to sync transactions for item {plaid_item.id}: {e}")
-                import traceback
-                logger.error(f"Traceback: {traceback.format_exc()}")
-                plaid_item.last_failed_sync = datetime.utcnow()
-                plaid_item.error = str(e)
+                error_msg = f"Failed to sync item {plaid_item.id}: {str(e)}"
+                logger.error(error_msg)
+                sync_errors.append(error_msg)
 
-        db.commit()
+                # Update error state in database
+                try:
+                    plaid_item.last_sync_attempt = datetime.utcnow()
+                    plaid_item.error_code = 'SYNC_ERROR'
+                    plaid_item.error_message = str(e)[:1000]  # Limit error message length
 
-        return {
+                    # Check for reauth errors
+                    if any(err in str(e) for err in ['ITEM_LOGIN_REQUIRED', 'ACCESS_NOT_GRANTED']):
+                        plaid_item.requires_reauth = True
+                        plaid_item.status = 'error'
+
+                    db.flush()
+                except Exception as db_error:
+                    logger.error(f"Failed to update error state for item {plaid_item.id}: {db_error}")
+
+        # Commit all changes
+        try:
+            db.commit()
+        except Exception as commit_error:
+            logger.error(f"Failed to commit transaction sync: {commit_error}")
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to save sync results: {str(commit_error)}"
+            )
+
+        # Prepare response
+        response = {
             "synced_count": total_synced,
             "new_transactions": total_new,
-            "message": f"Successfully synced {total_synced} transactions"
+            "modified_transactions": total_modified,
+            "removed_transactions": total_removed,
+            "message": f"Successfully synced {total_synced} transactions",
+            "items_processed": len(plaid_items),
+            "items_with_errors": len(sync_errors)
         }
+
+        if sync_errors:
+            response["errors"] = sync_errors
+            response["message"] += f" (with {len(sync_errors)} errors)"
+
+        return response
 
     except Exception as e:
         logger.error(f"Failed to sync transactions: {e}")
+        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to sync transactions: {str(e)}"
@@ -622,14 +577,18 @@ async def handle_webhook(
             return {"status": "ignored", "reason": "item_not_found"}
         
         # Take action based on webhook
-        if result["action"] == "fetch_transactions":
+        if result["action"] == "sync_transactions":
+            # For all sync-related webhooks, use the sync endpoint
             background_tasks.add_task(
-                fetch_initial_transactions,
+                sync_item_transactions,
                 plaid_item.id,
                 plaid_item.access_token,
+                plaid_item.cursor,
                 plaid_item.user_id
             )
-        elif result["action"] == "sync_transactions":
+            logger.info(f"Scheduled sync for item {plaid_item.id} via webhook: {webhook_code}")
+        elif result["action"] == "fetch_transactions":
+            # Legacy support - use sync instead
             background_tasks.add_task(
                 sync_item_transactions,
                 plaid_item.id,
@@ -754,6 +713,279 @@ async def fetch_initial_transactions(
             await redis_client.delete(f"sync_lock:{plaid_item_id}")
 
 
+async def sync_plaid_item_transactions(
+    plaid_item: PlaidItem,
+    db: Session,
+    user_id: str
+) -> Dict[str, int]:
+    """
+    Enhanced sync function for a single Plaid item with comprehensive error handling.
+    Handles both initial sync (cursor=None/empty) and incremental updates.
+
+    Returns:
+        Dictionary with sync statistics
+    """
+    # Normalize cursor - ensure empty string is treated as None
+    current_cursor = plaid_item.cursor if plaid_item.cursor and plaid_item.cursor.strip() else None
+    is_initial_sync = current_cursor is None
+
+    logger.info(f"Starting {'initial' if is_initial_sync else 'incremental'} sync for item {plaid_item.id}")
+    logger.info(f"Cursor: {repr(current_cursor)}")
+
+    # Mark sync attempt
+    plaid_item.last_sync_attempt = datetime.utcnow()
+    db.flush()
+
+    # Sync statistics
+    total_added = 0
+    total_modified = 0
+    total_removed = 0
+    page_count = 0
+
+    # Store original cursor for pagination error recovery
+    original_cursor = current_cursor
+
+    try:
+        has_more = True
+
+        while has_more:
+            page_count += 1
+
+            try:
+                logger.info(f"Fetching sync page {page_count} for item {plaid_item.id}")
+                sync_result = await plaid_service.sync_transactions(
+                    access_token=plaid_item.access_token,
+                    cursor=current_cursor,
+                    count=500  # Use max page size for efficiency
+                )
+
+                logger.info(f"Page {page_count}: added={len(sync_result.get('added', []))}, "
+                          f"modified={len(sync_result.get('modified', []))}, "
+                          f"removed={len(sync_result.get('removed', []))}, "
+                          f"has_more={sync_result.get('has_more', False)}")
+
+            except Exception as sync_error:
+                # Handle pagination mutation error by restarting from original cursor
+                if 'TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION' in str(sync_error):
+                    logger.warning(f"Pagination mutation detected, restarting from original cursor")
+                    current_cursor = original_cursor
+                    page_count = 0
+                    total_added = 0
+                    total_modified = 0
+                    total_removed = 0
+                    continue
+                else:
+                    raise
+
+            # Process added transactions
+            for txn_data in sync_result.get("added", []):
+                if await process_added_transaction(txn_data, plaid_item, db):
+                    total_added += 1
+
+            # Process modified transactions
+            for txn_data in sync_result.get("modified", []):
+                if await process_modified_transaction(txn_data, db):
+                    total_modified += 1
+
+            # Process removed transactions
+            for removed_txn in sync_result.get("removed", []):
+                if await process_removed_transaction(removed_txn, db):
+                    total_removed += 1
+
+            # Update cursor and check for more pages
+            current_cursor = sync_result.get("next_cursor")
+            has_more = sync_result.get("has_more", False)
+
+        # Update Plaid item with final cursor and mark as successful
+        plaid_item.cursor = current_cursor
+        plaid_item.last_successful_sync = datetime.utcnow()
+        plaid_item.error_code = None
+        plaid_item.error_message = None
+
+        # Mark as healthy if it was in error state
+        if plaid_item.status == 'error':
+            plaid_item.status = 'active'
+            plaid_item.requires_reauth = False
+
+        # Flush changes for this item
+        db.flush()
+
+        logger.info(
+            f"{'Initial' if is_initial_sync else 'Incremental'} sync complete for item {plaid_item.id}: "
+            f"Added: {total_added}, Modified: {total_modified}, Removed: {total_removed}, "
+            f"Pages: {page_count}, Final cursor: {current_cursor[:20] if current_cursor else 'None'}..."
+        )
+
+        return {
+            "synced_count": total_added + total_modified,
+            "new_transactions": total_added,
+            "modified_transactions": total_modified,
+            "removed_transactions": total_removed,
+            "pages_processed": page_count
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to sync transactions for item {plaid_item.id}: {e}")
+        raise
+
+
+async def process_added_transaction(
+    txn_data: Dict[str, Any],
+    plaid_item: PlaidItem,
+    db: Session
+) -> bool:
+    """
+    Process a newly added transaction with deduplication and error handling.
+
+    Returns:
+        True if transaction was processed successfully, False otherwise
+    """
+    try:
+        # Check if transaction already exists (deduplication)
+        existing = db.query(Transaction).filter(
+            Transaction.plaid_transaction_id == txn_data["transaction_id"]
+        ).first()
+
+        if existing:
+            logger.debug(f"Transaction {txn_data['transaction_id']} already exists, skipping")
+            return False
+
+        # Get account with plaid_item verification
+        account = db.query(Account).filter(
+            Account.plaid_account_id == txn_data["account_id"],
+            Account.plaid_item_id == plaid_item.id
+        ).first()
+
+        if not account:
+            logger.warning(f"Account {txn_data['account_id']} not found for item {plaid_item.id}")
+            return False
+
+        # Parse and validate date
+        txn_date = parse_transaction_date(txn_data["date"])
+        auth_date = parse_transaction_date(txn_data.get("authorized_date"))
+
+        # Create transaction using the correct model structure
+        transaction = Transaction(
+            account_id=account.id,
+            plaid_transaction_id=txn_data["transaction_id"],
+            amount_cents=int(float(txn_data["amount"]) * 100),
+            iso_currency_code=txn_data.get("iso_currency_code", "USD"),
+            date=txn_date,
+            authorized_date=auth_date,
+            name=txn_data["name"][:500],  # Ensure name fits in column
+            merchant_name=txn_data.get("merchant_name", "")[:255] if txn_data.get("merchant_name") else None,
+            category=txn_data.get("category", []),
+            category_id=txn_data.get("category_id"),
+            primary_category=txn_data.get("category", [""])[0][:100] if txn_data.get("category") else None,
+            detailed_category=txn_data.get("category", ["", ""])[-1][:100] if txn_data.get("category") and len(txn_data.get("category")) > 1 else None,
+            pending=txn_data.get("pending", False),
+            pending_transaction_id=txn_data.get("pending_transaction_id"),
+            payment_channel=txn_data.get("payment_channel"),
+            location=txn_data.get("location"),
+            account_owner=txn_data.get("account_owner")
+        )
+
+        db.add(transaction)
+        return True
+
+    except Exception as e:
+        logger.error(f"Failed to process added transaction {txn_data.get('transaction_id', 'unknown')}: {e}")
+        return False
+
+
+async def process_modified_transaction(
+    txn_data: Dict[str, Any],
+    db: Session
+) -> bool:
+    """
+    Process a modified transaction with error handling.
+
+    Returns:
+        True if transaction was processed successfully, False otherwise
+    """
+    try:
+        transaction = db.query(Transaction).filter(
+            Transaction.plaid_transaction_id == txn_data["transaction_id"]
+        ).first()
+
+        if not transaction:
+            logger.warning(f"Transaction to modify not found: {txn_data['transaction_id']}")
+            return False
+
+        # Update transaction fields
+        transaction.amount_cents = int(float(txn_data["amount"]) * 100)
+        transaction.date = parse_transaction_date(txn_data["date"])
+        transaction.name = txn_data["name"][:500]
+        transaction.merchant_name = txn_data.get("merchant_name", "")[:255] if txn_data.get("merchant_name") else None
+        transaction.category = txn_data.get("category", [])
+        transaction.category_id = txn_data.get("category_id")
+        transaction.primary_category = txn_data.get("category", [""])[0][:100] if txn_data.get("category") else None
+        transaction.detailed_category = txn_data.get("category", ["", ""])[-1][:100] if txn_data.get("category") and len(txn_data.get("category")) > 1 else None
+        transaction.pending = txn_data.get("pending", False)
+        transaction.location = txn_data.get("location")
+
+        return True
+
+    except Exception as e:
+        logger.error(f"Failed to process modified transaction {txn_data.get('transaction_id', 'unknown')}: {e}")
+        return False
+
+
+async def process_removed_transaction(
+    removed_txn: Dict[str, Any],
+    db: Session
+) -> bool:
+    """
+    Process a removed transaction with error handling.
+
+    Returns:
+        True if transaction was processed successfully, False otherwise
+    """
+    try:
+        transaction = db.query(Transaction).filter(
+            Transaction.plaid_transaction_id == removed_txn["transaction_id"]
+        ).first()
+
+        if transaction:
+            db.delete(transaction)
+            return True
+        else:
+            logger.debug(f"Transaction to remove not found: {removed_txn['transaction_id']}")
+            return False
+
+    except Exception as e:
+        logger.error(f"Failed to process removed transaction {removed_txn.get('transaction_id', 'unknown')}: {e}")
+        return False
+
+
+def parse_transaction_date(date_value: Any) -> Optional[datetime.date]:
+    """
+    Parse transaction date handling both string and date objects.
+
+    Args:
+        date_value: Date value from Plaid (string, date, or None)
+
+    Returns:
+        Parsed date object or None
+    """
+    if not date_value:
+        return None
+
+    if isinstance(date_value, str):
+        try:
+            return datetime.strptime(date_value, "%Y-%m-%d").date()
+        except ValueError:
+            logger.warning(f"Invalid date format: {date_value}")
+            return None
+    elif hasattr(date_value, 'date'):
+        return date_value.date()
+    elif isinstance(date_value, datetime.date):
+        return date_value
+    else:
+        logger.warning(f"Unknown date type: {type(date_value)} - {date_value}")
+        return None
+
+
 async def sync_item_transactions(
     plaid_item_id: str,
     access_token: str,
@@ -761,106 +993,63 @@ async def sync_item_transactions(
     user_id: str
 ):
     """
-    Background task to sync transactions incrementally.
+    Background task wrapper for sync_plaid_item_transactions.
+    Maintains compatibility with existing background task calls.
     """
     try:
-        logger.info(f"Syncing transactions for item {plaid_item_id}")
-        
         db = next(get_db())
-        
-        has_more = True
-        total_added = 0
-        total_modified = 0
-        total_removed = 0
-        next_cursor = cursor
-        
-        while has_more:
-            result = await plaid_service.sync_transactions(
-                access_token=access_token,
-                cursor=next_cursor
-            )
-            
-            # Process added transactions
-            for txn_data in result["added"]:
-                # Get account
-                account = db.query(Account).filter(
-                    Account.plaid_account_id == txn_data["account_id"]
-                ).first()
-                
-                if account:
-                    transaction = Transaction(
-                        user_id=user_id,
-                        account_id=account.id,
-                        plaid_transaction_id=txn_data["transaction_id"],
-                        amount=txn_data["amount"],
-                        iso_currency_code=txn_data.get("iso_currency_code", "USD"),
-                        category=json.dumps(txn_data.get("category", [])),
-                        category_id=txn_data.get("category_id"),
-                        transaction_date=txn_data["date"],
-                        authorized_date=txn_data.get("authorized_date"),
-                        name=txn_data["name"],
-                        merchant_name=txn_data.get("merchant_name"),
-                        payment_channel=txn_data["payment_channel"],
-                        pending=txn_data["pending"],
-                        pending_transaction_id=txn_data.get("pending_transaction_id"),
-                        location_data=json.dumps(txn_data.get("location")) if txn_data.get("location") else None
-                    )
-                    db.add(transaction)
-                    total_added += 1
-            
-            # Process modified transactions
-            for txn_data in result["modified"]:
-                transaction = db.query(Transaction).filter(
-                    Transaction.plaid_transaction_id == txn_data["transaction_id"]
-                ).first()
-                
-                if transaction:
-                    transaction.amount = txn_data["amount"]
-                    transaction.category = json.dumps(txn_data.get("category", []))
-                    transaction.category_id = txn_data.get("category_id")
-                    transaction.name = txn_data["name"]
-                    transaction.merchant_name = txn_data.get("merchant_name")
-                    transaction.pending = txn_data["pending"]
-                    total_modified += 1
-            
-            # Process removed transactions
-            for removed_txn in result["removed"]:
-                transaction = db.query(Transaction).filter(
-                    Transaction.plaid_transaction_id == removed_txn["transaction_id"]
-                ).first()
-                
-                if transaction:
-                    db.delete(transaction)
-                    total_removed += 1
-            
-            next_cursor = result["next_cursor"]
-            has_more = result["has_more"]
-        
-        # Update Plaid item with new cursor
+
         plaid_item = db.query(PlaidItem).filter(
             PlaidItem.id == plaid_item_id
         ).first()
-        
-        if plaid_item:
-            plaid_item.cursor = next_cursor
-            plaid_item.last_successful_sync = datetime.utcnow()
-        
-        db.commit()
-        
-        logger.info(
-            f"Sync complete for item {plaid_item_id}: "
-            f"Added: {total_added}, Modified: {total_modified}, Removed: {total_removed}"
+
+        if not plaid_item:
+            logger.error(f"Plaid item {plaid_item_id} not found")
+            return
+
+        # Update cursor if provided (for backward compatibility)
+        if cursor is not None:
+            plaid_item.cursor = cursor
+
+        result = await sync_plaid_item_transactions(
+            plaid_item=plaid_item,
+            db=db,
+            user_id=user_id
         )
-        
-        # Clear sync lock
-        redis_client = await get_redis_client()
-        if redis_client:
-            await redis_client.delete(f"sync_lock:{plaid_item_id}")
-        
+
+        db.commit()
+
+        logger.info(f"Background sync complete for item {plaid_item_id}: {result}")
+
     except Exception as e:
-        logger.error(f"Failed to sync transactions: {e}")
-        
+        logger.error(f"Background sync failed for item {plaid_item_id}: {e}")
+
+        # Update error state
+        try:
+            db = next(get_db())
+            plaid_item = db.query(PlaidItem).filter(
+                PlaidItem.id == plaid_item_id
+            ).first()
+
+            if plaid_item:
+                plaid_item.error_code = 'SYNC_ERROR'
+                plaid_item.error_message = str(e)[:1000]
+                plaid_item.last_sync_attempt = datetime.utcnow()
+
+                # Check for reauth errors
+                if any(err in str(e) for err in ['ITEM_LOGIN_REQUIRED', 'ACCESS_NOT_GRANTED']):
+                    plaid_item.requires_reauth = True
+                    plaid_item.status = 'error'
+
+                db.commit()
+        except Exception as db_error:
+            logger.error(f"Failed to update error state: {db_error}")
+
+    finally:
         # Clear sync lock
-        redis_client = await get_redis_client()
-        if redis_client:
-            await redis_client.delete(f"sync_lock:{plaid_item_id}")
+        try:
+            redis_client = await get_redis_client()
+            if redis_client:
+                await redis_client.delete(f"sync_lock:{plaid_item_id}")
+        except Exception as redis_error:
+            logger.error(f"Failed to clear sync lock: {redis_error}")
