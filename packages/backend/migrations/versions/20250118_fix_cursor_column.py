@@ -16,8 +16,8 @@ import sqlalchemy as sa
 from sqlalchemy import text
 
 # revision identifiers, used by Alembic.
-revision = 'fix_cursor_column_20250118'
-down_revision = '20250918_0600_aes256_upgrade'
+revision = 'fix_cursor_20250118'
+down_revision = 'aes256_upgrade'
 branch_labels = None
 depends_on = None
 

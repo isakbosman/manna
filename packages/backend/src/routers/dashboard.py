@@ -6,7 +6,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime, date, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_, or_
+from sqlalchemy import func, and_, or_, case
 
 from ..database import get_db
 from ..database.models import User, Account, Transaction, Category
@@ -31,11 +31,10 @@ async def get_financial_summary(
 ) -> ResponseModel:
     """Get financial summary with assets, liabilities, and net worth."""
     try:
-        # Get all user accounts
+        # Get all user accounts (is_hidden is a property that checks is_active)
         accounts = db.query(Account).filter(
             Account.user_id == current_user.id,
-            Account.is_active == True,
-            Account.is_hidden == False
+            Account.is_active == True
         ).all()
 
         # Calculate totals
@@ -53,21 +52,21 @@ async def get_financial_summary(
         }
 
         for account in accounts:
-            balance = account.current_balance_cents / 100 if account.current_balance_cents else 0
+            balance = float(account.current_balance) if account.current_balance else 0
 
-            if account.type in ["depository", "investment"]:
+            if account.account_type in ["depository", "investment"]:
                 total_assets += balance
-                if account.type == "depository":
+                if account.account_type == "depository":
                     liquid_assets += balance
-                    if account.subtype == "checking":
+                    if account.account_subtype == "checking":
                         breakdown["checking"] += balance
-                    elif account.subtype == "savings":
+                    elif account.account_subtype == "savings":
                         breakdown["savings"] += balance
                 else:
                     breakdown["investments"] += balance
-            elif account.type in ["credit", "loan"]:
+            elif account.account_type in ["credit", "loan"]:
                 total_liabilities += abs(balance)
-                if account.type == "credit":
+                if account.account_type == "credit":
                     breakdown["creditCards"] -= abs(balance)
                 else:
                     breakdown["loans"] -= abs(balance)
@@ -122,11 +121,11 @@ async def get_recent_transactions(
                 "id": str(t.id),
                 "date": t.date.isoformat(),
                 "description": t.name or t.merchant_name or "Unknown",
-                "amount": (t.amount_cents / 100) if t.amount_cents else 0,
-                "category": t.primary_category or "Uncategorized",
+                "amount": float(t.amount) if t.amount else 0,
+                "category": t.user_category_override or t.subcategory or "Uncategorized",
                 "account": account.name if account else "Unknown",
                 "merchant": t.merchant_name,
-                "type": "debit" if (t.amount_cents or 0) > 0 else "credit"
+                "type": "debit" if (t.amount or 0) > 0 else "credit"
             })
 
         return ResponseModel(data=data)
@@ -152,15 +151,17 @@ async def get_spending_by_category(
             Account.is_active == True
         ).subquery()
 
-        # Get spending by category
+        # Get spending by category - use actual columns not properties
         spending = db.query(
-            Transaction.primary_category,
-            func.sum(Transaction.amount_cents).label("total")
+            func.coalesce(Transaction.user_category_override, Transaction.subcategory, 'Uncategorized').label('category'),
+            func.sum(Transaction.amount * 100).label("total")
         ).filter(
             Transaction.account_id.in_(account_ids),
             Transaction.date >= start_date,
-            Transaction.amount_cents > 0  # Only expenses
-        ).group_by(Transaction.primary_category).all()
+            Transaction.amount > 0  # Only expenses
+        ).group_by(
+            func.coalesce(Transaction.user_category_override, Transaction.subcategory, 'Uncategorized')
+        ).all()
 
         # Calculate total and format data
         total = sum(s.total for s in spending if s.total)
@@ -171,7 +172,7 @@ async def get_spending_by_category(
             if s.total:
                 value = s.total / 100
                 data.append({
-                    "name": s.primary_category or "Other",
+                    "name": s.category or "Other",
                     "value": value,
                     "color": colors[i % len(colors)],
                     "percentage": (value / (total / 100)) * 100 if total > 0 else 0
@@ -206,14 +207,18 @@ async def get_transaction_trends(
         # Get daily totals
         daily_totals = db.query(
             Transaction.date,
-            func.sum(func.case(
-                (Transaction.amount_cents < 0, -Transaction.amount_cents),
-                else_=0
-            )).label("income"),
-            func.sum(func.case(
-                (Transaction.amount_cents > 0, Transaction.amount_cents),
-                else_=0
-            )).label("expenses")
+            func.sum(
+                case(
+                    (Transaction.amount < 0, -Transaction.amount * 100),
+                    else_=0
+                )
+            ).label("income"),
+            func.sum(
+                case(
+                    (Transaction.amount > 0, Transaction.amount * 100),
+                    else_=0
+                )
+            ).label("expenses")
         ).filter(
             Transaction.account_id.in_(account_ids),
             Transaction.date >= start_date
@@ -259,14 +264,18 @@ async def get_cash_flow(
         # Get monthly totals
         monthly_totals = db.query(
             func.date_trunc('month', Transaction.date).label("month"),
-            func.sum(func.case(
-                (Transaction.amount_cents < 0, -Transaction.amount_cents),
-                else_=0
-            )).label("income"),
-            func.sum(func.case(
-                (Transaction.amount_cents > 0, Transaction.amount_cents),
-                else_=0
-            )).label("expenses")
+            func.sum(
+                case(
+                    (Transaction.amount < 0, -Transaction.amount),
+                    else_=0
+                )
+            ).label("income"),
+            func.sum(
+                case(
+                    (Transaction.amount > 0, Transaction.amount),
+                    else_=0
+                )
+            ).label("expenses")
         ).filter(
             Transaction.account_id.in_(account_ids),
             Transaction.date >= start_date
@@ -278,8 +287,8 @@ async def get_cash_flow(
         month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
         for month_data in monthly_totals:
-            income = month_data.income / 100 if month_data.income else 0
-            expenses = -(month_data.expenses / 100) if month_data.expenses else 0
+            income = float(month_data.income) if month_data.income else 0
+            expenses = -float(month_data.expenses) if month_data.expenses else 0
             net_flow = income + expenses
             running_balance += net_flow
 
@@ -329,13 +338,12 @@ async def get_kpis(
         # Get user accounts
         accounts = db.query(Account).filter(
             Account.user_id == current_user.id,
-            Account.is_active == True,
-            Account.is_hidden == False
+            Account.is_active == True
         ).all()
 
         # Calculate total balance
         total_balance = sum(
-            (a.current_balance_cents / 100) if a.current_balance_cents else 0
+            float(a.current_balance) if a.current_balance else 0
             for a in accounts
         )
 
@@ -350,11 +358,11 @@ async def get_kpis(
 
         # Calculate income and expenses
         monthly_income = sum(
-            (-t.amount_cents / 100) if t.amount_cents < 0 else 0
+            float(-t.amount) if t.amount and t.amount < 0 else 0
             for t in monthly_transactions
         )
         monthly_expenses = sum(
-            (t.amount_cents / 100) if t.amount_cents > 0 else 0
+            float(t.amount) if t.amount and t.amount > 0 else 0
             for t in monthly_transactions
         )
 

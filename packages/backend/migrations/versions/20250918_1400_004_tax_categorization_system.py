@@ -11,7 +11,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = '004'
-down_revision = '20250918_0600_upgrade_to_aes256_gcm'
+down_revision = 'fix_cursor_20250118'
 branch_labels = None
 depends_on = None
 
@@ -169,7 +169,6 @@ def upgrade() -> None:
         sa.Column('processing_time_ms', sa.Integer()),
         sa.Column('audit_metadata', postgresql.JSONB(), default={}),
         sa.CheckConstraint("action_type IN ('categorize', 'recategorize', 'tax_categorize', 'chart_assign', 'bulk_update')", name='ck_action_type'),
-        sa.ForeignKeyConstraint(['chart_account_id'], ['chart_of_accounts.id']),
         sa.ForeignKeyConstraint(['new_category_id'], ['categories.id']),
         sa.ForeignKeyConstraint(['new_chart_account_id'], ['chart_of_accounts.id']),
         sa.ForeignKeyConstraint(['new_tax_category_id'], ['tax_categories.id']),

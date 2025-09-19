@@ -56,10 +56,11 @@ async def list_accounts(
         
         # Apply filters
         if not include_hidden:
-            query = query.filter(Account.is_hidden == False)
+            # is_hidden is a property that returns not is_active, so filter on is_active
+            query = query.filter(Account.is_active == True)
         
         if account_type:
-            query = query.filter(Account.type == account_type)
+            query = query.filter(Account.account_type == account_type)
         
         # Get total count before pagination
         total = query.count()
@@ -67,7 +68,7 @@ async def list_accounts(
         # Apply pagination and ordering
         accounts = (
             query
-            .order_by(desc(Account.current_balance_cents), Account.name)
+            .order_by(desc(Account.current_balance), Account.name)
             .offset((page - 1) * per_page)
             .limit(per_page)
             .all()

@@ -6,6 +6,7 @@ from sqlalchemy import (
     Column, String, Integer, Float, Boolean, DateTime, Date,
     ForeignKey, Text, JSON, Numeric, Index, UniqueConstraint
 )
+from decimal import Decimal
 from sqlalchemy.dialects.postgresql import UUID as PostgreSQLUUID
 from sqlalchemy import TypeDecorator, String
 from sqlalchemy.dialects import postgresql, sqlite
@@ -90,9 +91,15 @@ class Institution(Base, TimestampMixin):
     plaid_institution_id = Column(String(255), unique=True, nullable=False, index=True)
     name = Column(String(255), nullable=False)
     url = Column(String(500))
-    logo_url = Column(Text)  # Base64 encoded logo or URL
+    logo_url = Column('logo', Text)  # Base64 encoded logo or URL
     primary_color = Column(String(7))  # Hex color code
-    
+    country_codes = Column('country_codes', JSON, default=list)
+    products = Column('products', JSON, default=list)
+    routing_numbers = Column('routing_numbers', JSON, default=list)
+    is_active = Column('is_active', Boolean, default=True, nullable=False)
+    oauth_required = Column('oauth_required', Boolean, default=False)
+    institution_metadata = Column('metadata', JSON, default=dict)
+
     # Relationships
     plaid_items = relationship("PlaidItem", back_populates="institution")
     accounts = relationship("Account", back_populates="institution")
@@ -193,19 +200,81 @@ class Account(Base, TimestampMixin):
     # Account information
     name = Column(String(255), nullable=False)
     official_name = Column(String(255))
-    type = Column(String(50), nullable=False)  # depository, credit, loan, investment
-    subtype = Column(String(50))  # checking, savings, credit card, etc.
-    mask = Column(String(10))  # Last 4 digits of account number
+    account_type = Column('account_type', String(50), nullable=False)  # depository, credit, loan, investment
+    account_subtype = Column('account_subtype', String(50))  # checking, savings, credit card, etc.
+
+    # Maintain backwards compatibility with property aliases
+    @property
+    def type(self):
+        return self.account_type
+
+    @type.setter
+    def type(self, value):
+        self.account_type = value
+
+    @property
+    def subtype(self):
+        return self.account_subtype
+
+    @subtype.setter
+    def subtype(self, value):
+        self.account_subtype = value
+
+    @property
+    def mask(self):
+        return self.account_number_masked
+
+    @mask.setter
+    def mask(self, value):
+        self.account_number_masked = value
     
-    # Balances (stored as cents to avoid floating point issues)
-    current_balance_cents = Column(Integer)
-    available_balance_cents = Column(Integer)
-    limit_cents = Column(Integer)  # For credit accounts
-    iso_currency_code = Column(String(3), default="USD")
-    
+    # Balances (using Numeric for precise decimal values)
+    current_balance = Column('current_balance', Numeric(15, 2))
+    available_balance = Column('available_balance', Numeric(15, 2))
+    credit_limit = Column('credit_limit', Numeric(15, 2))  # For credit accounts
+    minimum_balance = Column('minimum_balance', Numeric(15, 2))
+
+    # Maintain backwards compatibility with cents properties
+    @property
+    def current_balance_cents(self):
+        return int(self.current_balance * 100) if self.current_balance else 0
+
+    @property
+    def available_balance_cents(self):
+        return int(self.available_balance * 100) if self.available_balance else 0
+
+    @property
+    def limit_cents(self):
+        return int(self.credit_limit * 100) if self.credit_limit else None
+
+    # Currency
+    iso_currency_code = Column('iso_currency_code', String(3), default="USD")
+
     # Status
-    is_active = Column(Boolean, default=True, nullable=False)
-    is_hidden = Column(Boolean, default=False, nullable=False)
+    is_business = Column('is_business', Boolean, default=False, nullable=False)
+    is_active = Column('is_active', Boolean, default=True, nullable=False)
+    is_manual = Column('is_manual', Boolean, default=False, nullable=False)
+
+    # Sync status
+    last_sync = Column('last_sync', DateTime(timezone=True))
+    sync_status = Column('sync_status', String(20))
+    error_code = Column('error_code', String(50))
+    error_message = Column('error_message', Text)
+
+    # Additional fields
+    account_number_masked = Column('account_number_masked', String(20))
+    routing_number = Column('routing_number', String(20))
+    account_metadata = Column('metadata', JSON)
+
+    # Compatibility property for is_hidden
+    @property
+    def is_hidden(self):
+        return not self.is_active  # Treat inactive accounts as hidden
+
+    @is_hidden.setter
+    def is_hidden(self, value):
+        if value:
+            self.is_active = False
     
     # Relationships
     user = relationship("User", back_populates="accounts")
@@ -216,19 +285,9 @@ class Account(Base, TimestampMixin):
     # Indexes
     __table_args__ = (
         Index("idx_account_user_active", "user_id", "is_active"),
-        Index("idx_account_type", "type", "subtype"),
+        Index("idx_account_type", "account_type", "account_subtype"),
     )
-    
-    @property
-    def current_balance(self):
-        """Get current balance in dollars."""
-        return self.current_balance_cents / 100 if self.current_balance_cents else 0
-    
-    @property
-    def available_balance(self):
-        """Get available balance in dollars."""
-        return self.available_balance_cents / 100 if self.available_balance_cents else 0
-    
+
     def __repr__(self):
         return f"<Account(id={self.id}, name={self.name}, type={self.type})>"
 
@@ -242,12 +301,21 @@ class Transaction(Base, TimestampMixin):
     plaid_transaction_id = Column(String(255), unique=True, nullable=False, index=True)
     
     # Transaction details
-    amount_cents = Column(Integer, nullable=False)  # Stored as cents
+    amount = Column('amount', Numeric(15, 2), nullable=False)
     iso_currency_code = Column(String(3), default="USD")
     date = Column(Date, nullable=False, index=True)
     datetime = Column(DateTime(timezone=True))
     authorized_date = Column(Date)
     authorized_datetime = Column(DateTime(timezone=True))
+
+    # Backwards compatibility for amount_cents
+    @property
+    def amount_cents(self):
+        return int(self.amount * 100) if self.amount else 0
+
+    @amount_cents.setter
+    def amount_cents(self, value):
+        self.amount = Decimal(value) / 100 if value else 0
     
     # Description and merchant info
     name = Column(String(500), nullable=False)
@@ -255,12 +323,28 @@ class Transaction(Base, TimestampMixin):
     original_description = Column(Text)
     
     # Categorization
-    category = Column(JSON)  # Plaid categories as JSON array
-    category_id = Column(String(50), index=True)
-    primary_category = Column(String(100), index=True)
-    detailed_category = Column(String(100))
-    confidence_level = Column(Float)  # ML confidence score
-    user_category = Column(String(100))  # User-defined override
+    plaid_category = Column('plaid_category', JSON)  # Plaid categories as JSON array
+    plaid_category_id = Column('plaid_category_id', String(50))
+    category_id = Column('category_id', UUID(), ForeignKey("categories.id"))  # Reference to categories table
+    subcategory = Column('subcategory', String(100))
+    user_category_override = Column('user_category_override', String(100))  # User-defined override
+    tax_category_id = Column('tax_category_id', UUID(), ForeignKey("tax_categories.id"))
+
+    # Maintain backwards compatibility
+    @property
+    def primary_category(self):
+        """Get primary category name from related category."""
+        if self.category:
+            return self.category.name
+        return None
+
+    @property
+    def detailed_category(self):
+        return self.subcategory
+
+    @property
+    def user_category(self):
+        return self.user_category_override
     
     # Transaction type and status
     pending = Column(Boolean, default=False, nullable=False)
@@ -285,22 +369,19 @@ class Transaction(Base, TimestampMixin):
     
     # Relationships
     account = relationship("Account", back_populates="transactions")
+    category = relationship("Category", backref="transactions")
+    tax_category = relationship("TaxCategory", backref="transactions")
     ml_predictions = relationship("MLPrediction", back_populates="transaction", cascade="all, delete-orphan")
     
     # Indexes
     __table_args__ = (
         Index("idx_transaction_date_account", "date", "account_id"),
         Index("idx_transaction_pending", "pending"),
-        Index("idx_transaction_category", "primary_category", "detailed_category"),
+        Index("idx_transaction_category", "category_id", "subcategory"),
         Index("idx_transaction_merchant", "merchant_name"),
         Index("idx_transaction_reconciled", "is_reconciled"),
     )
-    
-    @property
-    def amount(self):
-        """Get amount in dollars."""
-        return self.amount_cents / 100 if self.amount_cents else 0
-    
+
     def __repr__(self):
         return f"<Transaction(id={self.id}, name={self.name}, amount={self.amount})>"
 
@@ -347,6 +428,26 @@ class MLPrediction(Base, TimestampMixin):
 
     def __repr__(self):
         return f"<MLPrediction(id={self.id}, transaction_id={self.transaction_id}, confidence={self.confidence})>"
+
+
+class TaxCategory(Base, TimestampMixin):
+    """Tax categories for IRS reporting."""
+    __tablename__ = "tax_categories"
+
+    id = Column(UUID(), primary_key=True, default=uuid.uuid4)
+    category_code = Column(String(20), nullable=False, unique=True)
+    category_name = Column(String(255), nullable=False)
+    tax_form = Column(String(50), nullable=False)
+    tax_line = Column(String(100))
+    description = Column(Text)
+    deduction_type = Column(String(50))
+    percentage_limit = Column(Numeric(5, 2))
+    is_business_expense = Column(Boolean, default=True)
+    is_active = Column(Boolean, default=True)
+    effective_date = Column(Date, nullable=False)
+
+    def __repr__(self):
+        return f"<TaxCategory(id={self.id}, code={self.category_code}, name={self.category_name})>"
 
 
 class CategorizationRule(Base, TimestampMixin):

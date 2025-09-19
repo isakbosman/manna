@@ -35,16 +35,15 @@ async def get_current_user(
     db: Session = Depends(get_db)
 ) -> User:
     """
-    DISABLED - Always returns or creates a default user for local development.
+    DISABLED - Always returns or creates the first user for local development.
     """
-    # Check if default user exists
-    default_user_id = "00000000-0000-0000-0000-000000000001"
-    user = db.query(User).filter(User.id == default_user_id).first()
+    # Get the first user from the database
+    user = db.query(User).first()
 
     if user is None:
-        # Create a default user
+        # Create a default user with a random UUID
         user = User(
-            id=default_user_id,
+            id=uuid.uuid4(),
             email="local@manna.finance",
             username="localuser",
             full_name="Local User",
@@ -59,8 +58,13 @@ async def get_current_user(
             db.refresh(user)
         except:
             db.rollback()
-            # User might already exist, just fetch it
-            user = db.query(User).filter(User.id == default_user_id).first()
+            # Try to get the first user again in case of race condition
+            user = db.query(User).first()
+            if user is None:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Could not create or find user"
+                )
 
     return user
 

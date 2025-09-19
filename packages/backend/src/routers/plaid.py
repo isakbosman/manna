@@ -4,6 +4,7 @@ Plaid integration router for connecting and managing financial accounts.
 
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta, date
+from decimal import Decimal
 from fastapi import APIRouter, HTTPException, status, Depends, BackgroundTasks, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
@@ -106,12 +107,19 @@ async def exchange_public_token(
                 
                 if not institution:
                     # Create new institution record
+                    # Convert Plaid objects to strings for JSON serialization
                     institution = Institution(
                         plaid_institution_id=inst_info["institution_id"],
                         name=inst_info["name"],
                         url=inst_info.get("url"),
                         primary_color=inst_info.get("primary_color"),
-                        logo_url=inst_info.get("logo")
+                        logo_url=inst_info.get("logo"),
+                        is_active=True,
+                        country_codes=[str(code) for code in inst_info.get("country_codes", [])],
+                        products=[str(product) for product in inst_info.get("products", [])],
+                        routing_numbers=inst_info.get("routing_numbers", []),
+                        oauth_required=inst_info.get("oauth", False),
+                        institution_metadata={}
                     )
                     db.add(institution)
                     db.flush()
@@ -166,9 +174,9 @@ async def exchange_public_token(
                 # Update existing account
                 account.name = account_data["name"]
                 account.official_name = account_data.get("official_name")
-                account.current_balance_cents = int(account_data["current_balance"] * 100)
-                account.available_balance_cents = int(account_data["available_balance"] * 100) if account_data.get("available_balance") is not None else None
-                account.limit_cents = int(account_data["limit"] * 100) if account_data.get("limit") is not None else None
+                account.current_balance = Decimal(str(account_data["current_balance"]))
+                account.available_balance = Decimal(str(account_data["available_balance"])) if account_data.get("available_balance") is not None else None
+                account.credit_limit = Decimal(str(account_data["limit"])) if account_data.get("limit") is not None else None
                 account.iso_currency_code = account_data["iso_currency_code"]
                 account.is_active = True
             else:
@@ -176,15 +184,16 @@ async def exchange_public_token(
                 account = Account(
                     user_id=current_user.id,
                     plaid_item_id=plaid_item.id,
+                    institution_id=institution.id if institution else None,
                     plaid_account_id=account_data["account_id"],
                     name=account_data["name"],
                     official_name=account_data.get("official_name"),
                     type=account_data["type"],
                     subtype=account_data["subtype"],
                     mask=account_data.get("mask"),
-                    current_balance_cents=int(account_data["current_balance"] * 100),
-                    available_balance_cents=int(account_data["available_balance"] * 100) if account_data.get("available_balance") is not None else None,
-                    limit_cents=int(account_data["limit"] * 100) if account_data.get("limit") is not None else None,
+                    current_balance=Decimal(str(account_data["current_balance"])),
+                    available_balance=Decimal(str(account_data["available_balance"])) if account_data.get("available_balance") is not None else None,
+                    credit_limit=Decimal(str(account_data["limit"])) if account_data.get("limit") is not None else None,
                     iso_currency_code=account_data["iso_currency_code"],
                     is_active=True
                 )
@@ -819,19 +828,23 @@ async def process_added_transaction(
         auth_date = parse_transaction_date(txn_data.get("authorized_date"))
 
         # Create transaction using the correct model structure
+        # Extract category information
+        categories = txn_data.get("category", [])
+        primary_cat = categories[0] if categories else None
+        sub_cat = categories[-1] if len(categories) > 1 else None
+
         transaction = Transaction(
             account_id=account.id,
             plaid_transaction_id=txn_data["transaction_id"],
-            amount_cents=int(float(txn_data["amount"]) * 100),
+            amount=Decimal(str(txn_data["amount"])),  # Use amount column directly
             iso_currency_code=txn_data.get("iso_currency_code", "USD"),
             date=txn_date,
             authorized_date=auth_date,
             name=txn_data["name"][:500],  # Ensure name fits in column
             merchant_name=txn_data.get("merchant_name", "")[:255] if txn_data.get("merchant_name") else None,
-            category=txn_data.get("category", []),
-            category_id=txn_data.get("category_id"),
-            primary_category=txn_data.get("category", [""])[0][:100] if txn_data.get("category") else None,
-            detailed_category=txn_data.get("category", ["", ""])[-1][:100] if txn_data.get("category") and len(txn_data.get("category")) > 1 else None,
+            plaid_category=categories,  # Store full category array as JSON
+            plaid_category_id=txn_data.get("category_id"),
+            subcategory=sub_cat[:100] if sub_cat else None,  # Store subcategory
             pending=txn_data.get("pending", False),
             pending_transaction_id=txn_data.get("pending_transaction_id"),
             payment_channel=txn_data.get("payment_channel"),
@@ -867,14 +880,17 @@ async def process_modified_transaction(
             return False
 
         # Update transaction fields
-        transaction.amount_cents = int(float(txn_data["amount"]) * 100)
+        # Extract category information
+        categories = txn_data.get("category", [])
+        sub_cat = categories[-1] if len(categories) > 1 else None
+
+        transaction.amount = Decimal(str(txn_data["amount"]))  # Use amount column directly
         transaction.date = parse_transaction_date(txn_data["date"])
         transaction.name = txn_data["name"][:500]
         transaction.merchant_name = txn_data.get("merchant_name", "")[:255] if txn_data.get("merchant_name") else None
-        transaction.category = txn_data.get("category", [])
-        transaction.category_id = txn_data.get("category_id")
-        transaction.primary_category = txn_data.get("category", [""])[0][:100] if txn_data.get("category") else None
-        transaction.detailed_category = txn_data.get("category", ["", ""])[-1][:100] if txn_data.get("category") and len(txn_data.get("category")) > 1 else None
+        transaction.plaid_category = categories  # Store full category array as JSON
+        transaction.plaid_category_id = txn_data.get("category_id")
+        transaction.subcategory = sub_cat[:100] if sub_cat else None  # Store subcategory
         transaction.pending = txn_data.get("pending", False)
         transaction.location = txn_data.get("location")
 

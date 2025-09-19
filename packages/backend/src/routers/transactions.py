@@ -168,46 +168,46 @@ async def get_transaction_stats(
     
     # Calculate statistics
     total_count = query.count()
-    total_income = query.filter(Transaction.amount_cents > 0).with_entities(
-        func.sum(Transaction.amount_cents)
+    total_income = query.filter(Transaction.amount > 0).with_entities(
+        func.sum(Transaction.amount)
     ).scalar() or 0
-    total_expenses = query.filter(Transaction.amount_cents < 0).with_entities(
-        func.sum(Transaction.amount_cents)
+    total_expenses = query.filter(Transaction.amount < 0).with_entities(
+        func.sum(Transaction.amount)
     ).scalar() or 0
-    
-    # Get category breakdown
+
+    # Get category breakdown (use subcategory column)
     category_breakdown = query.with_entities(
-        Transaction.primary_category,
+        Transaction.subcategory,
         func.count(Transaction.id).label("count"),
-        func.sum(Transaction.amount_cents).label("total")
-    ).group_by(Transaction.primary_category).all()
+        func.sum(Transaction.amount).label("total")
+    ).group_by(Transaction.subcategory).all()
     
     categories = [
         CategorySummary(
             category=cat[0] or "Uncategorized",
             transaction_count=cat[1],
-            total_amount=cat[2] / 100
+            total_amount=float(cat[2]) if cat[2] else 0
         )
         for cat in category_breakdown
     ]
-    
+
     # Get monthly trend
     monthly_trend = query.with_entities(
         extract('year', Transaction.date).label('year'),
         extract('month', Transaction.date).label('month'),
-        func.sum(Transaction.amount_cents).label('total')
+        func.sum(Transaction.amount).label('total')
     ).group_by('year', 'month').order_by('year', 'month').all()
-    
+
     return TransactionStats(
         total_transactions=total_count,
-        total_income=total_income / 100,
-        total_expenses=abs(total_expenses) / 100,
-        net_amount=(total_income + total_expenses) / 100,
+        total_income=float(total_income) if total_income else 0,
+        total_expenses=abs(float(total_expenses)) if total_expenses else 0,
+        net_amount=float(total_income + total_expenses) if (total_income and total_expenses) else 0,
         categories=categories,
         monthly_trend=[
             {
                 "month": f"{int(m[0])}-{int(m[1]):02d}",
-                "amount": m[2] / 100
+                "amount": float(m[2]) if m[2] else 0
             }
             for m in monthly_trend
         ]

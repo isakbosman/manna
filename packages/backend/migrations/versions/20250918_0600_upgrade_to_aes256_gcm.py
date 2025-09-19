@@ -18,8 +18,8 @@ import logging
 from datetime import datetime
 
 # revision identifiers
-revision = '20250918_0600_aes256_upgrade'
-down_revision = '20250918_0500_encrypt_tokens'
+revision = 'aes256_upgrade'
+down_revision = 'encrypt_tokens'
 branch_labels = None
 depends_on = None
 

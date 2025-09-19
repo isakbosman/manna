@@ -9,7 +9,7 @@ import logging
 import time
 import contextlib
 from typing import Generator, Optional, Dict, Any
-from sqlalchemy import create_engine, MetaData, event, pool
+from sqlalchemy import create_engine, MetaData, event, pool, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
@@ -121,13 +121,13 @@ class SecureDatabase:
             start_time = time.time()
             with self.engine.connect() as conn:
                 # Test basic query
-                result = conn.execute("SELECT 1 as test")
+                result = conn.execute(text("SELECT 1 as test"))
                 row = result.fetchone()
                 if not row or row[0] != 1:
                     raise DatabaseError("Database connection test failed")
 
                 # Test permissions
-                conn.execute("SELECT current_user, session_user")
+                conn.execute(text("SELECT current_user, session_user"))
 
             connection_time = time.time() - start_time
             self._connection_stats["last_connection_time"] = connection_time
@@ -247,7 +247,7 @@ class SecureDatabase:
             # Test basic connectivity
             start_time = time.time()
             with self.engine.connect() as conn:
-                result = conn.execute("SELECT 1, current_timestamp, version()")
+                result = conn.execute(text("SELECT 1, current_timestamp, version()"))
                 row = result.fetchone()
                 if row:
                     health_info["connection_test"] = True
@@ -296,7 +296,7 @@ class SecureDatabase:
         """
         try:
             with self.engine.connect() as conn:
-                conn.execute("SELECT 1")
+                conn.execute(text("SELECT 1"))
             return True
         except Exception as e:
             logger.error(f"Database connection validation failed: {e}")

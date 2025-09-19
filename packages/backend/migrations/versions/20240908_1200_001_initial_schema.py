@@ -25,8 +25,11 @@ def upgrade() -> None:
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.Column('email', sa.String(length=255), nullable=False),
-        sa.Column('password_hash', sa.String(length=255), nullable=False),
+        sa.Column('username', sa.String(length=100), nullable=False),
+        sa.Column('hashed_password', sa.String(length=255), nullable=False),
+        sa.Column('full_name', sa.String(length=255)),
         sa.Column('is_active', sa.Boolean(), nullable=False, default=True),
+        sa.Column('is_superuser', sa.Boolean(), nullable=False, default=False),
         sa.Column('is_verified', sa.Boolean(), nullable=False, default=False),
         sa.Column('email_verified_at', sa.DateTime(timezone=True)),
         sa.Column('first_name', sa.String(length=100)),
@@ -49,6 +52,7 @@ def upgrade() -> None:
     op.create_index('idx_users_email_active', 'users', ['email', 'is_active'])
     op.create_index('idx_users_last_login', 'users', ['last_login'])
     op.create_index(op.f('ix_users_email'), 'users', ['email'], unique=True)
+    op.create_index(op.f('ix_users_username'), 'users', ['username'], unique=True)
     
     # Create institutions table
     op.create_table('institutions',
@@ -78,29 +82,18 @@ def upgrade() -> None:
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.Column('user_id', postgresql.UUID(as_uuid=True)),
-        sa.Column('parent_id', postgresql.UUID(as_uuid=True)),
         sa.Column('name', sa.String(length=100), nullable=False),
+        sa.Column('parent_category', sa.String(length=100)),
         sa.Column('description', sa.Text()),
-        sa.Column('category_type', sa.String(length=20), default='expense'),
-        sa.Column('is_business_category', sa.Boolean(), default=False),
-        sa.Column('is_tax_deductible', sa.Boolean(), default=False),
-        sa.Column('is_system_category', sa.Boolean(), default=False),
-        sa.Column('icon', sa.String(length=50)),
         sa.Column('color', sa.String(length=7)),
-        sa.Column('sort_order', sa.Integer(), default=0),
+        sa.Column('icon', sa.String(length=50)),
+        sa.Column('is_system', sa.Boolean(), default=False, nullable=False),
         sa.Column('is_active', sa.Boolean(), nullable=False, default=True),
-        sa.Column('is_budgetable', sa.Boolean(), default=True),
-        sa.Column('default_budget_percentage', sa.Integer()),
-        sa.Column('metadata', postgresql.JSONB(), default={}),
-        sa.CheckConstraint("category_type IN ('income', 'expense', 'transfer')", name='ck_category_type'),
-        sa.ForeignKeyConstraint(['parent_id'], ['categories.id']),
+        sa.Column('rules', postgresql.JSONB()),
         sa.ForeignKeyConstraint(['user_id'], ['users.id']),
         sa.PrimaryKeyConstraint('id'),
-        sa.UniqueConstraint('user_id', 'parent_id', 'name', name='uq_category_hierarchy')
+        sa.UniqueConstraint('user_id', 'name', name='uq_user_category')
     )
-    op.create_index('idx_categories_parent', 'categories', ['parent_id'])
-    op.create_index('idx_categories_system', 'categories', ['is_system_category', 'is_active'])
-    op.create_index('idx_categories_type', 'categories', ['category_type', 'is_active'])
     op.create_index('idx_categories_user_active', 'categories', ['user_id', 'is_active'])
     
     # Create plaid_items table

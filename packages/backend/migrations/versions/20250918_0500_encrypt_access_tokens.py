@@ -16,8 +16,8 @@ from sqlalchemy import text
 import logging
 
 # revision identifiers
-revision = '20250918_0500_encrypt_tokens'
-down_revision = '20250918_0430_seed_initial_data'
+revision = 'encrypt_tokens'
+down_revision = 'seed_001'
 branch_labels = None
 depends_on = None
 

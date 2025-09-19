@@ -17,7 +17,7 @@ import uuid
 
 # revision identifiers, used by Alembic.
 revision: str = "seed_001"
-down_revision: Union[str, None] = "003"
+down_revision: Union[str, None] = "fix_plaid_sync_20250917"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
