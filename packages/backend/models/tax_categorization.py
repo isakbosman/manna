@@ -45,6 +45,7 @@ class ChartOfAccount(Base, UUIDMixin, TimestampMixin):
     child_accounts = relationship("ChartOfAccount", back_populates="parent_account")
     transactions = relationship("Transaction", back_populates="chart_account")
     category_mappings = relationship("CategoryMapping", back_populates="chart_account")
+    # journal_entry_lines = relationship("JournalEntryLine", back_populates="chart_account")
 
     # Constraints
     __table_args__ = (

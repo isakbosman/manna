@@ -48,3 +48,4 @@ Contains the Plaid API integration for pulling financial transactions from conne
 - Integration with Plaid API is the primary technical component
 - Focus is on financial data processing and report generation
 - Before running any python or pip commands you must activate the conda environment manna
+- Postgres is running locally the connection string is in the docker-compose.yml file

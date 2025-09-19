@@ -14,8 +14,11 @@ import {
   Menu,
   X,
   ChevronDown,
-  User
+  User,
+  BookOpen
 } from 'lucide-react'
+
+import Image from 'next/image'
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -31,8 +34,9 @@ export function DashboardLayout({ children, title, description }: DashboardLayou
 
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    { name: 'Accounts', href: '/accounts', icon: CreditCard },
     { name: 'Transactions', href: '/transactions', icon: Receipt },
+    { name: 'Bookkeeping', href: '/bookkeeping', icon: BookOpen },
+    { name: 'Accounts', href: '/accounts', icon: CreditCard },
     { name: 'Reports', href: '/reports', icon: FileText },
     { name: 'Settings', href: '/settings', icon: Settings },
   ]
@@ -62,8 +66,8 @@ export function DashboardLayout({ children, title, description }: DashboardLayou
       >
         <div className="flex items-center justify-between h-16 px-4 border-b">
           <div className="flex items-center">
-            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center">
-              <span className="text-white font-bold">M</span>
+            <div className="h-8 w-8 flex items-center justify-center">
+              <Image src="/logo.png" width={32} height={32} alt="Manna Logo" className="rounded"/>
             </div>
             <span className="ml-3 text-xl font-semibold text-gray-900">Manna</span>
           </div>
@@ -101,10 +105,10 @@ export function DashboardLayout({ children, title, description }: DashboardLayou
         <div className="flex flex-col flex-grow bg-white border-r border-gray-200">
           <div className="flex items-center h-16 px-4 border-b">
             <div className="flex items-center">
-              <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center">
-                <span className="text-white font-bold">M</span>
-              </div>
-              <span className="ml-3 text-xl font-semibold text-gray-900">Manna Financial</span>
+              <div className="h-8 w-8 flex items-center justify-center">
+              <Image src="/logo.png" width={32} height={32} alt="Manna Logo" className="rounded"/>
+            </div>
+              <span className="ml-3 text-xl font-semibold text-gray-900">Manna</span>
             </div>
           </div>
           <nav className="flex-1 mt-5 px-2 pb-4">

@@ -15,6 +15,7 @@ import {
   Wallet,
   Receipt,
   Calculator,
+  BookOpen,
   X
 } from 'lucide-react'
 import { Button } from '../ui/button'
@@ -37,6 +38,12 @@ const navigation = [
     href: '/transactions',
     icon: Receipt,
     description: 'View and manage transactions'
+  },
+  {
+    name: 'Bookkeeping',
+    href: '/bookkeeping',
+    icon: BookOpen,
+    description: 'Automated bookkeeping & reconciliation'
   },
   {
     name: 'Accounts',

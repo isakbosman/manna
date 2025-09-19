@@ -1,9 +1,9 @@
 {
-  "../../../node_modules/.pnpm/@tanstack+query-devtools@5.87.3/node_modules/@tanstack/query-devtools/build/index.js -> ./DevtoolsComponent/NCMVHL6D.js": {
+  "../../../node_modules/@tanstack/query-devtools/build/index.js -> ./DevtoolsComponent/NCMVHL6D.js": {
     "id": null,
     "files": []
   },
-  "../../../node_modules/.pnpm/@tanstack+query-devtools@5.87.3/node_modules/@tanstack/query-devtools/build/index.js -> ./DevtoolsPanelComponent/2AITGKQY.js": {
+  "../../../node_modules/@tanstack/query-devtools/build/index.js -> ./DevtoolsPanelComponent/2AITGKQY.js": {
     "id": null,
     "files": []
   }

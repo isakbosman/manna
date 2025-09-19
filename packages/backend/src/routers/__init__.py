@@ -8,6 +8,7 @@ from .accounts import router as accounts_router
 from .transactions import router as transactions_router
 from .plaid import router as plaid_router
 from .ml import router as ml_router
+from .bookkeeping import router as bookkeeping_router
 
 __all__ = [
     "auth_router",
@@ -16,4 +17,5 @@ __all__ = [
     "transactions_router",
     "plaid_router",
     "ml_router",
+    "bookkeeping_router",
 ]

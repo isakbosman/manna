@@ -71,6 +71,13 @@ class User(Base, TimestampMixin):
     # Relationships
     plaid_items = relationship("PlaidItem", back_populates="user", cascade="all, delete-orphan")
     accounts = relationship("Account", back_populates="user", cascade="all, delete-orphan")
+
+    # Bookkeeping relationships
+    accounting_periods = relationship("AccountingPeriod", back_populates="user", cascade="all, delete-orphan")
+    bookkeeping_rules = relationship("BookkeepingRule", back_populates="user", cascade="all, delete-orphan")
+    journal_entries = relationship("JournalEntry", back_populates="user", cascade="all, delete-orphan")
+    reconciliations_performed = relationship("ReconciliationRecord", back_populates="reconciled_by_user", foreign_keys="ReconciliationRecord.reconciled_by")
+    transaction_patterns = relationship("TransactionPattern", back_populates="user", cascade="all, delete-orphan")
     
     @validates("email")
     def validate_email(self, key, email):
@@ -281,6 +288,7 @@ class Account(Base, TimestampMixin):
     plaid_item = relationship("PlaidItem", back_populates="accounts")
     institution = relationship("Institution", back_populates="accounts")
     transactions = relationship("Transaction", back_populates="account", cascade="all, delete-orphan")
+    reconciliation_records = relationship("ReconciliationRecord", back_populates="account", cascade="all, delete-orphan")
     
     # Indexes
     __table_args__ = (
@@ -372,6 +380,10 @@ class Transaction(Base, TimestampMixin):
     category = relationship("Category", backref="transactions")
     tax_category = relationship("TaxCategory", backref="transactions")
     ml_predictions = relationship("MLPrediction", back_populates="transaction", cascade="all, delete-orphan")
+
+    # Bookkeeping relationships
+    journal_entry_lines = relationship("JournalEntryLine", back_populates="transaction")
+    reconciliation_items = relationship("ReconciliationItem", back_populates="transaction")
     
     # Indexes
     __table_args__ = (
@@ -445,6 +457,9 @@ class TaxCategory(Base, TimestampMixin):
     is_business_expense = Column(Boolean, default=True)
     is_active = Column(Boolean, default=True)
     effective_date = Column(Date, nullable=False)
+
+    # Bookkeeping relationships
+    journal_entry_lines = relationship("JournalEntryLine", back_populates="tax_category")
 
     def __repr__(self):
         return f"<TaxCategory(id={self.id}, code={self.category_code}, name={self.category_name})>"

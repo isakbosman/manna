@@ -1,4 +1,4 @@
-// File: /Users/isak/dev/manna/packages/frontend/src/app/api/health/route.ts
+// File: /Users/isak/dev/accounts/packages/frontend/src/app/api/health/route.ts
 import * as entry from '../../../../../src/app/api/health/route.js'
 import type { NextRequest } from 'next/server.js'
 

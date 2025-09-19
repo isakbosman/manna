@@ -32,6 +32,7 @@ from .routers import (
     transactions_router,
     plaid_router,
     ml_router,
+    bookkeeping_router,
 )
 from .routers.categories import router as categories_router
 from .routers.reports import router as reports_router
@@ -172,6 +173,7 @@ app.include_router(plaid_router, prefix=f"{settings.api_prefix}/plaid", tags=["P
 app.include_router(ml_router, prefix=f"{settings.api_prefix}/ml", tags=["Machine Learning"])
 app.include_router(reports_router, prefix=f"{settings.api_prefix}/reports", tags=["Reports"])
 app.include_router(dashboard_router, prefix=f"{settings.api_prefix}/dashboard", tags=["Dashboard"])
+app.include_router(bookkeeping_router, prefix=f"{settings.api_prefix}/bookkeeping", tags=["Bookkeeping"])
 app.include_router(tax_router, tags=["Tax Categorization"])
 
 

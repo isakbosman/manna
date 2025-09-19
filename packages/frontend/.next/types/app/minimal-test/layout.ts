@@ -1,4 +1,4 @@
-// File: /Users/isak/dev/manna/packages/frontend/src/app/minimal-test/layout.tsx
+// File: /Users/isak/dev/accounts/packages/frontend/src/app/minimal-test/layout.tsx
 import * as entry from '../../../../src/app/minimal-test/layout.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 
