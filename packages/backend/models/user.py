@@ -48,6 +48,12 @@ class User(Base, UUIDMixin, TimestampMixin):
     budgets = relationship("Budget", back_populates="user", cascade="all, delete-orphan")
     audit_logs = relationship("AuditLog", back_populates="user")
     user_sessions = relationship("UserSession", back_populates="user", cascade="all, delete-orphan")
+
+    # Tax categorization relationships
+    chart_of_accounts = relationship("ChartOfAccount", back_populates="user", cascade="all, delete-orphan")
+    category_mappings = relationship("CategoryMapping", back_populates="user", cascade="all, delete-orphan")
+    business_expense_tracking = relationship("BusinessExpenseTracking", back_populates="user", cascade="all, delete-orphan")
+    categorization_audits = relationship("CategorizationAudit", back_populates="user", cascade="all, delete-orphan")
     
     # Indexes for performance
     __table_args__ = (

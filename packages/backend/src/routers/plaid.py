@@ -3,7 +3,7 @@ Plaid integration router for connecting and managing financial accounts.
 """
 
 from typing import Dict, Any, List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from fastapi import APIRouter, HTTPException, status, Depends, BackgroundTasks, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
@@ -625,79 +625,33 @@ async def fetch_initial_transactions(
 ):
     """
     Background task to fetch initial transactions after linking.
+    Uses the sync method to properly handle cursor and transaction processing.
     """
     try:
         logger.info(f"Fetching initial transactions for item {plaid_item_id}")
-        
-        # Fetch transactions for the last 2 years
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=730)
-        
+
         db = next(get_db())
-        
-        # Get all transactions
-        offset = 0
-        total_added = 0
-        
-        while True:
-            result = await plaid_service.get_transactions(
-                access_token=access_token,
-                start_date=start_date,
-                end_date=end_date,
-                count=500,
-                offset=offset
-            )
-            
-            # Process transactions
-            for txn_data in result["transactions"]:
-                # Check if transaction exists
-                existing = db.query(Transaction).filter(
-                    Transaction.plaid_transaction_id == txn_data["transaction_id"]
-                ).first()
-                
-                if not existing:
-                    # Get account
-                    account = db.query(Account).filter(
-                        Account.plaid_account_id == txn_data["account_id"]
-                    ).first()
-                    
-                    if account:
-                        transaction = Transaction(
-                            user_id=user_id,
-                            account_id=account.id,
-                            plaid_transaction_id=txn_data["transaction_id"],
-                            amount=txn_data["amount"],
-                            iso_currency_code=txn_data["iso_currency_code"],
-                            category=json.dumps(txn_data.get("category", [])),
-                            category_id=txn_data.get("category_id"),
-                            transaction_date=txn_data["date"],
-                            authorized_date=txn_data.get("authorized_date"),
-                            name=txn_data["name"],
-                            merchant_name=txn_data.get("merchant_name"),
-                            payment_channel=txn_data["payment_channel"],
-                            pending=txn_data["pending"],
-                            pending_transaction_id=txn_data.get("pending_transaction_id"),
-                            location_data=json.dumps(txn_data.get("location")) if txn_data.get("location") else None
-                        )
-                        db.add(transaction)
-                        total_added += 1
-            
-            # Check if more transactions available
-            offset += len(result["transactions"])
-            if offset >= result["total_transactions"]:
-                break
-        
-        # Update Plaid item
+
+        # Get the plaid item
         plaid_item = db.query(PlaidItem).filter(
             PlaidItem.id == plaid_item_id
         ).first()
-        
-        if plaid_item:
-            plaid_item.last_successful_sync = datetime.utcnow()
-        
+
+        if not plaid_item:
+            logger.error(f"PlaidItem {plaid_item_id} not found")
+            return
+
+        # Use the sync function which properly handles transactions and cursor
+        result = await sync_plaid_item_transactions(
+            plaid_item=plaid_item,
+            db=db,
+            user_id=user_id
+        )
+
         db.commit()
-        
-        logger.info(f"Added {total_added} initial transactions for item {plaid_item_id}")
+
+        logger.info(f"Initial sync complete for item {plaid_item_id}: "
+                   f"Added {result['new_transactions']} transactions")
         
         # Clear sync lock
         redis_client = await get_redis_client()
@@ -958,7 +912,7 @@ async def process_removed_transaction(
         return False
 
 
-def parse_transaction_date(date_value: Any) -> Optional[datetime.date]:
+def parse_transaction_date(date_value: Any) -> Optional[date]:
     """
     Parse transaction date handling both string and date objects.
 
@@ -979,7 +933,7 @@ def parse_transaction_date(date_value: Any) -> Optional[datetime.date]:
             return None
     elif hasattr(date_value, 'date'):
         return date_value.date()
-    elif isinstance(date_value, datetime.date):
+    elif isinstance(date_value, date):
         return date_value
     else:
         logger.warning(f"Unknown date type: {type(date_value)} - {date_value}")

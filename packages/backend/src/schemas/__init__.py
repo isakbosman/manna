@@ -23,6 +23,16 @@ from .common import (
     PaginationParams, PaginatedResponse, HealthCheck,
     ErrorResponse, SuccessResponse
 )
+from .tax_categorization import (
+    TaxCategory, TaxCategoryCreate, TaxCategoryUpdate,
+    ChartOfAccount, ChartOfAccountCreate, ChartOfAccountUpdate,
+    BusinessExpenseTracking, BusinessExpenseTrackingCreate, BusinessExpenseTrackingUpdate,
+    CategoryMapping, CategoryMappingCreate, CategoryMappingUpdate,
+    TaxCategorizationRequest, TaxCategorizationResponse,
+    BulkTaxCategorizationRequest, BulkTaxCategorizationResponse,
+    TaxSummaryResponse, ScheduleCExportResponse,
+    TrialBalanceResponse, FinancialStatementsResponse
+)
 
 __all__ = [
     # User schemas
@@ -45,4 +55,14 @@ __all__ = [
     # Common schemas
     "PaginationParams", "PaginatedResponse", "HealthCheck",
     "ErrorResponse", "SuccessResponse",
+
+    # Tax categorization schemas
+    "TaxCategory", "TaxCategoryCreate", "TaxCategoryUpdate",
+    "ChartOfAccount", "ChartOfAccountCreate", "ChartOfAccountUpdate",
+    "BusinessExpenseTracking", "BusinessExpenseTrackingCreate", "BusinessExpenseTrackingUpdate",
+    "CategoryMapping", "CategoryMappingCreate", "CategoryMappingUpdate",
+    "TaxCategorizationRequest", "TaxCategorizationResponse",
+    "BulkTaxCategorizationRequest", "BulkTaxCategorizationResponse",
+    "TaxSummaryResponse", "ScheduleCExportResponse",
+    "TrialBalanceResponse", "FinancialStatementsResponse",
 ]

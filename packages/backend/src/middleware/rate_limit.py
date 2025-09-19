@@ -18,7 +18,7 @@ class RateLimitMiddleware:
     """
     Rate limiting middleware to prevent abuse.
     """
-    
+
     def __init__(
         self,
         app,
@@ -30,35 +30,57 @@ class RateLimitMiddleware:
         self.requests_per_minute = requests_per_minute
         self.requests_per_hour = requests_per_hour
         self.exclude_paths = exclude_paths or ["/", "/health", "/docs", "/redoc", "/openapi.json"]
-    
-    async def __call__(self, request: Request, call_next):
+
+    async def __call__(self, scope, receive, send):
+        # Only process HTTP requests
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        from starlette.requests import Request
+        from starlette.responses import Response
+
+        request = Request(scope, receive=receive)
+
         # Skip rate limiting for excluded paths
         if request.url.path in self.exclude_paths:
-            return await call_next(request)
-        
+            await self.app(scope, receive, send)
+            return
+
         # Skip rate limiting in development
         if settings.environment == "development":
-            return await call_next(request)
-        
+            await self.app(scope, receive, send)
+            return
+
         # Get client identifier (IP address or user ID if authenticated)
         client_id = self._get_client_id(request)
-        
+
         # Check rate limits
         if not await self._check_rate_limit(client_id):
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Rate limit exceeded. Please try again later."
+            response = Response(
+                content='{"detail":"Rate limit exceeded. Please try again later."}',
+                status_code=429,
+                media_type="application/json"
             )
-        
-        # Process request
-        response = await call_next(request)
-        
-        # Add rate limit headers
-        response.headers["X-RateLimit-Limit"] = str(self.requests_per_minute)
-        response.headers["X-RateLimit-Remaining"] = str(await self._get_remaining_requests(client_id))
-        response.headers["X-RateLimit-Reset"] = str(int(time.time()) + 60)
-        
-        return response
+            await response(scope, receive, send)
+            return
+
+        # Add custom send to inject headers
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start":
+                headers = dict(message.get("headers", []))
+                headers[b"x-ratelimit-limit"] = str(self.requests_per_minute).encode()
+                remaining = await self._get_remaining_requests(client_id)
+                headers[b"x-ratelimit-remaining"] = str(remaining).encode()
+                headers[b"x-ratelimit-reset"] = str(int(time.time()) + 60).encode()
+
+                # Convert headers back to list of tuples
+                message["headers"] = [(k, v) for k, v in headers.items()]
+
+            await send(message)
+
+        # Process request with modified send
+        await self.app(scope, receive, send_wrapper)
     
     def _get_client_id(self, request: Request) -> str:
         """

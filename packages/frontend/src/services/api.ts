@@ -18,6 +18,81 @@ import type {
   Report,
 } from '@manna/shared';
 
+// Tax-related types
+export interface TaxCategory {
+  id: string;
+  name: string;
+  schedule_c_line: string;
+  description: string;
+  is_deductible: boolean;
+  requires_receipt: boolean;
+  has_business_use_percentage: boolean;
+  is_meals_50_percent: boolean;
+  is_vehicle_expense: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChartOfAccount {
+  id: string;
+  name: string;
+  account_type: 'asset' | 'liability' | 'equity' | 'income' | 'expense';
+  parent_id?: string;
+  balance: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TaxCategorization {
+  id: string;
+  transaction_id: string;
+  tax_category_id: string;
+  business_use_percentage: number;
+  business_purpose?: string;
+  receipt_url?: string;
+  mileage?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TaxSummary {
+  tax_year: number;
+  total_deductions: number;
+  categories: Array<{
+    tax_category_id: string;
+    category_name: string;
+    schedule_c_line: string;
+    total_amount: number;
+    transaction_count: number;
+    documentation_status: 'complete' | 'partial' | 'missing';
+  }>;
+  documentation_status: {
+    total_transactions: number;
+    with_receipts: number;
+    missing_receipts: number;
+    complete_business_purpose: number;
+    missing_business_purpose: number;
+  };
+}
+
+export interface CategorizeSingleRequest {
+  tax_category_id: string;
+  business_use_percentage: number;
+  business_purpose?: string;
+  receipt_url?: string;
+  mileage?: number;
+}
+
+export interface CategorizeBulkRequest {
+  transaction_ids: string[];
+  tax_category_id: string;
+  business_use_percentage: number;
+  business_purpose?: string;
+  receipt_url?: string;
+  mileage?: number;
+}
+
 // Authentication Service
 export const authService = {
   async login(credentials: LoginRequest): Promise<LoginResponse> {
@@ -297,6 +372,86 @@ export const settingsService = {
   },
 };
 
+// Tax Categorization Service
+export const taxService = {
+  async getTaxCategories(): Promise<TaxCategory[]> {
+    return api.get<TaxCategory[]>(API_ENDPOINTS.tax.categories);
+  },
+
+  async categorizeTransaction(
+    transactionId: string,
+    data: CategorizeSingleRequest
+  ): Promise<TaxCategorization> {
+    return api.post<TaxCategorization>(API_ENDPOINTS.tax.categorize, {
+      transaction_id: transactionId,
+      ...data,
+    });
+  },
+
+  async bulkCategorizeTransactions(
+    data: CategorizeBulkRequest
+  ): Promise<TaxCategorization[]> {
+    return api.post<TaxCategorization[]>(API_ENDPOINTS.tax.bulkCategorize, data);
+  },
+
+  async getTaxSummary(params: {
+    start_date?: string;
+    end_date?: string;
+    tax_year?: number;
+  }): Promise<TaxSummary> {
+    return api.get<TaxSummary>(API_ENDPOINTS.tax.summary, params);
+  },
+
+  async updateCategorization(
+    categorizationId: string,
+    data: Partial<CategorizeSingleRequest>
+  ): Promise<TaxCategorization> {
+    return api.patch<TaxCategorization>(
+      API_ENDPOINTS.tax.categorization(categorizationId),
+      data
+    );
+  },
+
+  async deleteCategorization(categorizationId: string): Promise<void> {
+    return api.delete(API_ENDPOINTS.tax.categorization(categorizationId));
+  },
+};
+
+// Chart of Accounts Service
+export const chartOfAccountsService = {
+  async getChartOfAccounts(): Promise<ChartOfAccount[]> {
+    return api.get<ChartOfAccount[]>(API_ENDPOINTS.chartOfAccounts.list);
+  },
+
+  async createAccount(data: {
+    name: string;
+    account_type: 'asset' | 'liability' | 'equity' | 'income' | 'expense';
+    parent_id?: string;
+    balance?: number;
+  }): Promise<ChartOfAccount> {
+    return api.post<ChartOfAccount>(API_ENDPOINTS.chartOfAccounts.create, {
+      ...data,
+      balance: data.balance || 0,
+      is_active: true,
+    });
+  },
+
+  async getAccount(id: string): Promise<ChartOfAccount> {
+    return api.get<ChartOfAccount>(API_ENDPOINTS.chartOfAccounts.get(id));
+  },
+
+  async updateAccount(
+    id: string,
+    data: Partial<ChartOfAccount>
+  ): Promise<ChartOfAccount> {
+    return api.patch<ChartOfAccount>(API_ENDPOINTS.chartOfAccounts.update(id), data);
+  },
+
+  async deleteAccount(id: string): Promise<void> {
+    return api.delete(API_ENDPOINTS.chartOfAccounts.delete(id));
+  },
+};
+
 // Health Check Service
 export const healthService = {
   async checkHealth(): Promise<{
@@ -322,6 +477,8 @@ export const apiServices = {
   ml: mlService,
   reports: reportsService,
   settings: settingsService,
+  tax: taxService,
+  chartOfAccounts: chartOfAccountsService,
   health: healthService,
 };
 

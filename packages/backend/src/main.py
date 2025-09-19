@@ -36,6 +36,7 @@ from .routers import (
 from .routers.categories import router as categories_router
 from .routers.reports import router as reports_router
 from .routers.dashboard import router as dashboard_router
+from .routers.tax_categorization import router as tax_router
 from .schemas.common import HealthCheck
 from .utils.redis import check_redis_connection
 from .core.audit import log_audit_event, AuditEventType, AuditSeverity
@@ -136,7 +137,11 @@ if settings.security_headers_enabled:
     )
 
 if settings.rate_limiting_enabled:
-    app.add_middleware(RateLimitMiddleware)
+    app.add_middleware(
+        RateLimitMiddleware,
+        requests_per_minute=60,
+        requests_per_hour=1000
+    )
 
 # Add standard middleware
 app.add_middleware(ErrorHandlerMiddleware)
@@ -167,6 +172,7 @@ app.include_router(plaid_router, prefix=f"{settings.api_prefix}/plaid", tags=["P
 app.include_router(ml_router, prefix=f"{settings.api_prefix}/ml", tags=["Machine Learning"])
 app.include_router(reports_router, prefix=f"{settings.api_prefix}/reports", tags=["Reports"])
 app.include_router(dashboard_router, prefix=f"{settings.api_prefix}/dashboard", tags=["Dashboard"])
+app.include_router(tax_router, tags=["Tax Categorization"])
 
 
 @app.get("/", response_model=Dict[str, str])

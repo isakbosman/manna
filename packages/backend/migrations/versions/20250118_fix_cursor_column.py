@@ -1,7 +1,7 @@
 """Fix cursor column naming in plaid_items table.
 
 Revision ID: fix_cursor_column_20250118
-Revises: 20240908_1202_003_reporting_tables
+Revises: 20250918_0600_aes256_upgrade
 Create Date: 2025-01-18
 
 This migration ensures the cursor column in plaid_items table is properly named.
@@ -14,6 +14,12 @@ It handles both scenarios:
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy import text
+
+# revision identifiers, used by Alembic.
+revision = 'fix_cursor_column_20250118'
+down_revision = '20250918_0600_aes256_upgrade'
+branch_labels = None
+depends_on = None
 
 
 def upgrade():

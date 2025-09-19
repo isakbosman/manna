@@ -14,6 +14,13 @@ from .plaid_item import PlaidItem
 from .plaid_webhook import PlaidWebhook
 from .audit_log import AuditLog
 from .user_session import UserSession
+from .tax_categorization import (
+    ChartOfAccount,
+    TaxCategory,
+    BusinessExpenseTracking,
+    CategoryMapping,
+    CategorizationAudit
+)
 
 __all__ = [
     "Base",
@@ -31,4 +38,9 @@ __all__ = [
     "PlaidWebhook",
     "AuditLog",
     "UserSession",
+    "ChartOfAccount",
+    "TaxCategory",
+    "BusinessExpenseTracking",
+    "CategoryMapping",
+    "CategorizationAudit",
 ]

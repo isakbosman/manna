@@ -48,6 +48,7 @@ class Category(Base, UUIDMixin, TimestampMixin):
     ml_predictions = relationship("MLPrediction", back_populates="category")
     categorization_rules = relationship("CategorizationRule", back_populates="category")
     budget_items = relationship("BudgetItem", back_populates="category")
+    category_mappings = relationship("CategoryMapping", back_populates="source_category")
     
     # Constraints and indexes
     __table_args__ = (

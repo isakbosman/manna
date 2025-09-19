@@ -126,6 +126,24 @@ export const API_ENDPOINTS = {
     notifications: '/settings/notifications',
   },
   
+  // Tax Categorization
+  tax: {
+    categories: '/tax/categories',
+    categorize: '/tax/categorize',
+    bulkCategorize: '/tax/bulk-categorize',
+    summary: '/tax/summary',
+    categorization: (id: string) => `/tax/categorization/${id}`,
+  },
+
+  // Chart of Accounts
+  chartOfAccounts: {
+    list: '/chart-of-accounts',
+    create: '/chart-of-accounts',
+    get: (id: string) => `/chart-of-accounts/${id}`,
+    update: (id: string) => `/chart-of-accounts/${id}`,
+    delete: (id: string) => `/chart-of-accounts/${id}`,
+  },
+
   // Health
   health: '/health',
 };
@@ -166,13 +184,31 @@ export const api = {
   upload: async <T = any>(endpoint: string, file: File, fieldName = 'file') => {
     const formData = new FormData();
     formData.append(fieldName, file);
-    
+
     const response = await apiClient.post<T>(endpoint, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
     });
     return response.data;
+  },
+
+  // File download
+  download: async (endpoint: string, filename?: string): Promise<void> => {
+    const response = await apiClient.get(endpoint, {
+      responseType: 'blob',
+    });
+
+    // Create download link
+    const blob = new Blob([response.data]);
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename || 'download';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
   },
 };
 

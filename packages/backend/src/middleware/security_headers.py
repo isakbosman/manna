@@ -45,8 +45,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                 response.headers[header] = value
 
         # Remove sensitive server information
-        response.headers.pop("server", None)
-        response.headers.pop("x-powered-by", None)
+        # MutableHeaders doesn't have pop method, use del instead
+        if "server" in response.headers:
+            del response.headers["server"]
+        if "x-powered-by" in response.headers:
+            del response.headers["x-powered-by"]
 
         # Log security header application in development
         if settings.environment == "development":

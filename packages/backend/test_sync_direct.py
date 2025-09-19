@@ -1,70 +1,61 @@
 #!/usr/bin/env python
-"""Direct test of transaction sync functionality."""
+"""
+Test Plaid sync directly.
+"""
 
 import asyncio
-from src.database import SessionLocal
-from src.database.models import User, PlaidItem, Account, Transaction
-from src.services.plaid_service import plaid_service
-from datetime import datetime
+import sys
+sys.path.insert(0, '.')
 
-async def test_sync_direct():
-    """Test syncing transactions directly."""
+from src.database import SessionLocal
+from src.database.models import PlaidItem, Account, Transaction
+from src.routers.plaid import sync_plaid_item_transactions
+
+async def test_sync():
     db = SessionLocal()
 
     try:
-        # Get the user
-        user = db.query(User).filter(User.id == "00000000-0000-0000-0000-000000000001").first()
-        if not user:
-            print("❌ Default user not found")
+        # Get PlaidItem
+        plaid_item = db.query(PlaidItem).first()
+        if not plaid_item:
+            print("No PlaidItem found")
             return
 
-        print(f"✅ Found user: {user.email}")
+        print(f"Testing sync for PlaidItem {plaid_item.id}")
+        print(f"  Current cursor: {repr(plaid_item.cursor)}")
+        print(f"  Access token present: {bool(plaid_item.access_token)}")
 
-        # Get plaid items for this user
-        plaid_items = db.query(PlaidItem).filter(
-            PlaidItem.user_id == user.id,
-            PlaidItem.is_active == True
-        ).all()
+        # Call the sync function directly
+        result = await sync_plaid_item_transactions(
+            plaid_item=plaid_item,
+            db=db,
+            user_id=str(plaid_item.user_id)
+        )
 
-        print(f"✅ Found {len(plaid_items)} active Plaid items")
+        print("\nSync result:")
+        print(f"  Synced count: {result['synced_count']}")
+        print(f"  New transactions: {result['new_transactions']}")
+        print(f"  Modified: {result['modified_transactions']}")
+        print(f"  Removed: {result['removed_transactions']}")
 
-        for plaid_item in plaid_items:
-            print(f"\n🔄 Testing sync for Plaid item: {plaid_item.id}")
-            print(f"   Access token: {plaid_item.access_token[:20]}...")
-            print(f"   Cursor: {plaid_item.cursor}")
+        # Commit changes
+        db.commit()
 
-            try:
-                # Call the Plaid service directly
-                sync_result = await plaid_service.sync_transactions(
-                    plaid_item.access_token,
-                    plaid_item.cursor
-                )
+        # Check actual transaction count
+        accounts = db.query(Account).filter(Account.plaid_item_id == plaid_item.id).all()
+        total_txns = 0
+        for acc in accounts:
+            txn_count = db.query(Transaction).filter(Transaction.account_id == acc.id).count()
+            total_txns += txn_count
 
-                print(f"   ✅ Plaid API call successful!")
-                print(f"   Added: {len(sync_result.get('added', []))}")
-                print(f"   Modified: {len(sync_result.get('modified', []))}")
-                print(f"   Removed: {len(sync_result.get('removed', []))}")
-                print(f"   Has more: {sync_result.get('has_more', False)}")
-                print(f"   Next cursor: {sync_result.get('next_cursor', 'None')}")
+        print(f"\nTotal transactions in database: {total_txns}")
 
-                # Show first few transactions
-                added = sync_result.get('added', [])
-                if added:
-                    print(f"\n   First few transactions:")
-                    for i, txn in enumerate(added[:3]):
-                        print(f"     {i+1}. {txn['name']}: ${txn['amount']} on {txn['date']}")
-                else:
-                    print("   ❌ No transactions returned from Plaid API")
-
-            except Exception as e:
-                print(f"   ❌ Plaid API error: {e}")
-
-        # Check current transaction count
-        total_transactions = db.query(Transaction).count()
-        print(f"\n📊 Current transactions in database: {total_transactions}")
-
+    except Exception as e:
+        print(f"Error: {e}")
+        import traceback
+        traceback.print_exc()
     finally:
         db.close()
 
 if __name__ == "__main__":
-    asyncio.run(test_sync_direct())
+    asyncio.run(test_sync())

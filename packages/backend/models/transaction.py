@@ -84,6 +84,12 @@ class Transaction(Base, UUIDMixin, TimestampMixin):
     category = relationship("Category", back_populates="transactions")
     contra_transaction = relationship("Transaction", remote_side=[id])
     ml_predictions = relationship("MLPrediction", back_populates="transaction", cascade="all, delete-orphan")
+
+    # Tax categorization relationships
+    chart_account = relationship("ChartOfAccount", back_populates="transactions")
+    tax_category = relationship("TaxCategory", back_populates="transactions")
+    business_expense_tracking = relationship("BusinessExpenseTracking", back_populates="transaction", uselist=False, cascade="all, delete-orphan")
+    categorization_audits = relationship("CategorizationAudit", back_populates="transaction", cascade="all, delete-orphan")
     
     # Indexes and constraints
     __table_args__ = (
