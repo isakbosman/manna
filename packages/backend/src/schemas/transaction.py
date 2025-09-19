@@ -2,7 +2,7 @@
 Transaction schemas for API request/response validation.
 """
 
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+from pydantic import BaseModel, Field, field_validator, ConfigDict, computed_field
 from typing import Optional, List, Dict, Any, Literal
 from datetime import date as date_type, datetime
 from uuid import UUID
@@ -49,12 +49,26 @@ class Transaction(TransactionBase):
     original_description: Optional[str] = None
     
     # Categorization
-    category: Optional[List[str]] = None
+    plaid_category: Optional[List[str]] = Field(None, alias="plaid_categories")
     primary_category: Optional[str] = None
     detailed_category: Optional[str] = None
     user_category: Optional[str] = None
     confidence_level: Optional[float] = None
-    
+
+    # Add category field that frontend expects (use detailed_category or user_category)
+    @computed_field
+    @property
+    def category(self) -> Optional[str]:
+        """Return category for frontend compatibility."""
+        return self.user_category or self.detailed_category or None
+
+    # Add description alias for name (frontend expects 'description')
+    @computed_field
+    @property
+    def description(self) -> str:
+        """Return description for frontend compatibility."""
+        return self.name
+
     # Status
     is_reconciled: bool = False
     pending_transaction_id: Optional[str] = None
@@ -161,7 +175,28 @@ class TransactionStats(BaseModel):
     net_amount: float
     categories: List[CategorySummary]
     monthly_trend: Optional[List[Dict[str, Any]]] = None
-    
+
+    # Add computed fields for frontend compatibility
+    @computed_field
+    @property
+    def net_income(self) -> float:
+        """Return net_income for frontend compatibility."""
+        return self.net_amount
+
+    @computed_field
+    @property
+    def transaction_count(self) -> int:
+        """Return transaction_count for frontend compatibility."""
+        return self.total_transactions
+
+    @computed_field
+    @property
+    def avg_transaction_amount(self) -> float:
+        """Calculate average transaction amount."""
+        if self.total_transactions > 0:
+            return (self.total_income + self.total_expenses) / self.total_transactions
+        return 0
+
     model_config = ConfigDict(from_attributes=True)
 
 

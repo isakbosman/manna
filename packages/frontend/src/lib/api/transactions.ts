@@ -57,7 +57,19 @@ export const transactionsApi = {
       })
     }
 
-    return api.get(`/api/v1/transactions?${params.toString()}`)
+    const response = await api.get<{
+      items: Transaction[]
+      total: number
+      page: number
+      per_page: number
+      pages: number
+    }>(`/api/v1/transactions?${params.toString()}`)
+
+    // Transform the response to match expected format
+    return {
+      transactions: response.items || [],
+      total: response.total || 0
+    }
   },
 
   // Get a specific transaction by ID

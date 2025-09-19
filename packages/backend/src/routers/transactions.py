@@ -88,19 +88,19 @@ async def list_transactions(
         filters.append(Transaction.date <= end_date)
     
     if min_amount is not None:
-        filters.append(Transaction.amount_cents >= int(min_amount * 100))
+        filters.append(Transaction.amount >= min_amount)
     if max_amount is not None:
-        filters.append(Transaction.amount_cents <= int(max_amount * 100))
+        filters.append(Transaction.amount <= max_amount)
     
     if category:
-        filters.append(Transaction.primary_category == category)
+        filters.append(Transaction.subcategory == category)  # subcategory is the actual column
     if detailed_category:
-        filters.append(Transaction.detailed_category == detailed_category)
+        filters.append(Transaction.subcategory == detailed_category)
     
     if account_id:
         filters.append(Transaction.account_id == account_id)
     if account_type:
-        filters.append(Account.type == account_type)
+        filters.append(Account.account_type == account_type)
     
     if pending is not None:
         filters.append(Transaction.pending == pending)
