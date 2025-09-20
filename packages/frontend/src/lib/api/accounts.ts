@@ -1,4 +1,5 @@
 import { api } from '../api'
+import axios from 'axios'
 
 export interface Account {
   id: string
@@ -112,6 +113,41 @@ export const accountsApi = {
     return api.post('/api/v1/plaid/sync-transactions', {
       account_ids: accountIds
     })
+  },
+
+  // Fetch historical transactions for accounts
+  fetchHistoricalTransactions: async (
+    accountIds?: string[],
+    startDate?: string,
+    endDate?: string
+  ): Promise<{
+    success: boolean
+    total_fetched: number
+    new_transactions: number
+    duplicates_skipped: number
+    message: string
+    date_range: string
+    accounts_processed: number
+    errors?: string[]
+  }> => {
+    // Create a custom axios instance with longer timeout for historical fetches
+    // Historical fetches can take several minutes for accounts with many transactions
+    const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+    const historicalClient = axios.create({
+      baseURL: API_BASE_URL,
+      timeout: 300000, // 5 minutes timeout for historical fetches
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    })
+
+    const response = await historicalClient.post('/api/v1/plaid/fetch-historical-transactions', {
+      account_ids: accountIds,
+      start_date: startDate,
+      end_date: endDate
+    })
+
+    return response.data
   },
 
   // Get institution details

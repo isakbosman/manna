@@ -47,6 +47,7 @@ services:
       - PLAID_CLIENT_ID=${PLAID_CLIENT_ID}
       - PLAID_SECRET=${PLAID_SECRET}
       - PLAID_ENVIRONMENT=${PLAID_ENVIRONMENT}
+      - PLAIDE_PRODUCTS=${PLAID_PRODUCTS:-transactions,accounts}
     ports:
       - '8001:8000'
     volumes:
@@ -67,6 +68,7 @@ services:
     container_name: manna-frontend
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8001
+      - NEXT_PUBLIC_PLAID_ENV=${NEXT_PUBLIC_PLAID_ENV}
     ports:
       - '3000:3000'
     volumes:

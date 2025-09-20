@@ -172,7 +172,11 @@ async def exchange_public_token(
             
             if account:
                 # Update existing account
-                account.name = account_data["name"]
+                # Append mask to name to ensure uniqueness when multiple accounts have the same name
+                account_name = account_data["name"]
+                if account_data.get("mask"):
+                    account_name = f"{account_data['name']} (...{account_data['mask']})"
+                account.name = account_name
                 account.official_name = account_data.get("official_name")
                 account.current_balance = Decimal(str(account_data["current_balance"]))
                 account.available_balance = Decimal(str(account_data["available_balance"])) if account_data.get("available_balance") is not None else None
@@ -181,12 +185,17 @@ async def exchange_public_token(
                 account.is_active = True
             else:
                 # Create new account
+                # Append mask to name to ensure uniqueness when multiple accounts have the same name
+                account_name = account_data["name"]
+                if account_data.get("mask"):
+                    account_name = f"{account_data['name']} (...{account_data['mask']})"
+
                 account = Account(
                     user_id=current_user.id,
                     plaid_item_id=plaid_item.id,
                     institution_id=institution.id if institution else None,
                     plaid_account_id=account_data["account_id"],
-                    name=account_data["name"],
+                    name=account_name,
                     official_name=account_data.get("official_name"),
                     type=account_data["type"],
                     subtype=account_data["subtype"],
@@ -361,6 +370,154 @@ from pydantic import BaseModel
 
 class SyncTransactionsRequest(BaseModel):
     account_ids: Optional[List[str]] = None
+
+class FetchHistoricalTransactionsRequest(BaseModel):
+    account_ids: Optional[List[str]] = None
+    start_date: Optional[str] = None  # YYYY-MM-DD format, defaults to 2 years ago
+    end_date: Optional[str] = None  # YYYY-MM-DD format, defaults to today
+
+@router.post("/fetch-historical-transactions")
+async def fetch_historical_transactions(
+    request: FetchHistoricalTransactionsRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Fetch historical transactions beyond the 6-month sync limit.
+    This uses Plaid's transactions/get endpoint to fetch transactions from specified date range.
+
+    Args:
+        account_ids: Optional list of account IDs to fetch for. If None, fetches for all accounts.
+        start_date: Start date in YYYY-MM-DD format (defaults to 2 years ago)
+        end_date: End date in YYYY-MM-DD format (defaults to today)
+    """
+    try:
+        # Set default dates if not provided
+        from datetime import timedelta
+        end_date = request.end_date or date.today().strftime("%Y-%m-%d")
+        start_date = request.start_date or (date.today() - timedelta(days=730)).strftime("%Y-%m-%d")  # 2 years ago
+
+        logger.info(f"Fetching historical transactions from {start_date} to {end_date} for user {current_user.id}")
+
+        # Determine which accounts to fetch
+        if request.account_ids:
+            # Get specified accounts
+            accounts = db.query(Account).filter(
+                Account.user_id == current_user.id,
+                Account.id.in_(request.account_ids),
+                Account.is_active == True
+            ).all()
+        else:
+            # Get all active accounts
+            accounts = db.query(Account).filter(
+                Account.user_id == current_user.id,
+                Account.is_active == True
+            ).all()
+
+        if not accounts:
+            return {
+                "success": True,
+                "message": "No active accounts found",
+                "total_fetched": 0
+            }
+
+        # Group accounts by plaid_item
+        item_accounts = {}
+        for account in accounts:
+            if account.plaid_item_id:
+                if account.plaid_item_id not in item_accounts:
+                    item_accounts[account.plaid_item_id] = []
+                item_accounts[account.plaid_item_id].append(account.plaid_account_id)
+
+        total_fetched = 0
+        total_new = 0
+        fetch_errors = []
+
+        # Process each plaid item
+        for plaid_item_id, plaid_account_ids in item_accounts.items():
+            plaid_item = db.query(PlaidItem).filter(PlaidItem.id == plaid_item_id).first()
+            if not plaid_item:
+                continue
+
+            try:
+                # Fetch all transactions with pagination
+                offset = 0
+                has_more = True
+                item_total = 0
+
+                while has_more:
+                    batch_num = (offset // 500) + 1
+                    logger.info(f"Fetching batch {batch_num} (offset: {offset}) for item {plaid_item_id}")
+
+                    result = await plaid_service.get_transactions_with_dates(
+                        access_token=plaid_item.access_token,
+                        start_date=start_date,
+                        end_date=end_date,
+                        account_ids=plaid_account_ids,
+                        offset=offset,
+                        count=500
+                    )
+
+                    transactions = result.get("transactions", [])
+                    total_available = result.get("total_transactions", 0)
+                    has_more = result.get("has_more", False)
+
+                    # Process each transaction
+                    batch_new = 0
+                    for txn_data in transactions:
+                        success = await process_added_transaction(txn_data, plaid_item, db)
+                        if success:
+                            total_new += 1
+                            batch_new += 1
+                        item_total += 1
+
+                    db.flush()  # Flush after each batch
+
+                    total_fetched += len(transactions)
+                    offset += len(transactions)
+
+                    # Enhanced progress logging
+                    progress_pct = (offset / total_available * 100) if total_available > 0 else 0
+                    logger.info(
+                        f"Batch {batch_num} complete: {len(transactions)} transactions "
+                        f"({batch_new} new) - Progress: {offset}/{total_available} ({progress_pct:.1f}%)"
+                    )
+
+                    # Prevent infinite loops - increased limit for historical data
+                    if offset > 50000:  # Safety limit increased for historical fetches
+                        logger.warning(f"Reached safety limit of 50000 transactions for item {plaid_item_id}")
+                        break
+
+            except Exception as e:
+                error_msg = f"Failed to fetch historical for item {plaid_item_id}: {str(e)}"
+                logger.error(error_msg)
+                fetch_errors.append(error_msg)
+
+        # Commit all changes
+        db.commit()
+
+        response = {
+            "success": len(fetch_errors) == 0,
+            "total_fetched": total_fetched,
+            "new_transactions": total_new,
+            "duplicates_skipped": total_fetched - total_new,
+            "message": f"Fetched {total_fetched} historical transactions ({total_new} new)",
+            "date_range": f"{start_date} to {end_date}",
+            "accounts_processed": len(accounts)
+        }
+
+        if fetch_errors:
+            response["errors"] = fetch_errors
+
+        return response
+
+    except Exception as e:
+        logger.error(f"Failed to fetch historical transactions: {e}")
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch historical transactions: {str(e)}"
+        )
 
 @router.post("/sync-transactions")
 async def sync_all_transactions(
@@ -634,7 +791,7 @@ async def fetch_initial_transactions(
 ):
     """
     Background task to fetch initial transactions after linking.
-    Uses the sync method to properly handle cursor and transaction processing.
+    First uses sync for recent transactions, then fetches historical data.
     """
     try:
         logger.info(f"Fetching initial transactions for item {plaid_item_id}")
@@ -650,17 +807,94 @@ async def fetch_initial_transactions(
             logger.error(f"PlaidItem {plaid_item_id} not found")
             return
 
-        # Use the sync function which properly handles transactions and cursor
+        # First, use sync to get recent transactions (last 6 months)
         result = await sync_plaid_item_transactions(
             plaid_item=plaid_item,
             db=db,
             user_id=user_id
         )
 
-        db.commit()
-
         logger.info(f"Initial sync complete for item {plaid_item_id}: "
                    f"Added {result['new_transactions']} transactions")
+
+        # Now fetch historical transactions (2 years ago to 6 months ago)
+        try:
+            from datetime import timedelta
+            # Calculate dates for historical fetch
+            # Fetch from 2 years ago to 6 months ago (sync already got recent 6 months)
+            historical_start = (date.today() - timedelta(days=730)).strftime("%Y-%m-%d")  # 2 years ago
+            historical_end = (date.today() - timedelta(days=180)).strftime("%Y-%m-%d")  # 6 months ago
+
+            logger.info(f"Fetching historical transactions from {historical_start} to {historical_end}")
+
+            # Get all account IDs for this item
+            accounts = db.query(Account).filter(
+                Account.plaid_item_id == plaid_item_id
+            ).all()
+            account_ids = [acc.plaid_account_id for acc in accounts]
+
+            # Fetch historical transactions with pagination
+            offset = 0
+            has_more = True
+            total_historical = 0
+            new_historical = 0
+
+            while has_more:
+                batch_num = (offset // 500) + 1
+                hist_result = await plaid_service.get_transactions_with_dates(
+                    access_token=access_token,
+                    start_date=historical_start,
+                    end_date=historical_end,
+                    account_ids=account_ids,
+                    offset=offset,
+                    count=500
+                )
+
+                transactions = hist_result.get("transactions", [])
+                total_available = hist_result.get("total_transactions", 0)
+                has_more = hist_result.get("has_more", False)
+
+                # Process each transaction
+                batch_new = 0
+                for txn_data in transactions:
+                    success = await process_added_transaction(txn_data, plaid_item, db)
+                    if success:
+                        new_historical += 1
+                        batch_new += 1
+                    total_historical += 1
+
+                db.flush()  # Flush after each batch
+                offset += len(transactions)
+
+                # Enhanced progress logging
+                progress_pct = (offset / total_available * 100) if total_available > 0 else 0
+                logger.info(
+                    f"Historical batch {batch_num}: {len(transactions)} transactions "
+                    f"({batch_new} new) - Progress: {offset}/{total_available} ({progress_pct:.1f}%)"
+                )
+
+                # Safety limit - increased for historical data
+                if offset > 50000:
+                    logger.warning(f"Reached safety limit of 50000 historical transactions")
+                    break
+
+            db.commit()
+
+            # Log enhanced final summary
+            duplicates = total_historical - new_historical
+            logger.info(
+                f"Historical fetch complete for item {plaid_item_id}:\n"
+                f"  - Date range: {historical_start} to {historical_end}\n"
+                f"  - Total fetched: {total_historical}\n"
+                f"  - New transactions: {new_historical}\n"
+                f"  - Duplicates skipped: {duplicates}\n"
+                f"  - Accounts processed: {len(accounts)}"
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to fetch historical transactions: {e}")
+            # Don't fail the whole process if historical fetch fails
+            db.commit()
         
         # Clear sync lock
         redis_client = await get_redis_client()
@@ -740,20 +974,32 @@ async def sync_plaid_item_transactions(
                 else:
                     raise
 
-            # Process added transactions
-            for txn_data in sync_result.get("added", []):
+            # Process added transactions with progress tracking
+            added_txns = sync_result.get("added", [])
+            for i, txn_data in enumerate(added_txns):
                 if await process_added_transaction(txn_data, plaid_item, db):
                     total_added += 1
+                # Log progress every 100 transactions
+                if (i + 1) % 100 == 0:
+                    logger.info(f"Processing added transactions: {i + 1}/{len(added_txns)}")
 
             # Process modified transactions
-            for txn_data in sync_result.get("modified", []):
+            modified_txns = sync_result.get("modified", [])
+            for i, txn_data in enumerate(modified_txns):
                 if await process_modified_transaction(txn_data, db):
                     total_modified += 1
+                # Log progress every 100 transactions
+                if (i + 1) % 100 == 0:
+                    logger.info(f"Processing modified transactions: {i + 1}/{len(modified_txns)}")
 
             # Process removed transactions
-            for removed_txn in sync_result.get("removed", []):
+            removed_txns = sync_result.get("removed", [])
+            for i, removed_txn in enumerate(removed_txns):
                 if await process_removed_transaction(removed_txn, db):
                     total_removed += 1
+                # Log progress every 100 transactions
+                if (i + 1) % 100 == 0:
+                    logger.info(f"Processing removed transactions: {i + 1}/{len(removed_txns)}")
 
             # Update cursor and check for more pages
             current_cursor = sync_result.get("next_cursor")
@@ -829,9 +1075,9 @@ async def process_added_transaction(
 
         # Create transaction using the correct model structure
         # Extract category information
-        categories = txn_data.get("category", [])
+        categories = txn_data.get("category") or []  # Ensure it's always a list, not None
         primary_cat = categories[0] if categories else None
-        sub_cat = categories[-1] if len(categories) > 1 else None
+        sub_cat = categories[-1] if categories and len(categories) > 1 else None
 
         transaction = Transaction(
             account_id=account.id,
@@ -840,11 +1086,11 @@ async def process_added_transaction(
             iso_currency_code=txn_data.get("iso_currency_code", "USD"),
             date=txn_date,
             authorized_date=auth_date,
-            name=txn_data["name"][:500],  # Ensure name fits in column
-            merchant_name=txn_data.get("merchant_name", "")[:255] if txn_data.get("merchant_name") else None,
+            name=txn_data["name"][:500] if txn_data.get("name") else "Unknown Transaction",  # Handle None
+            merchant_name=txn_data.get("merchant_name")[:255] if txn_data.get("merchant_name") else None,  # Fixed logic
             plaid_category=categories,  # Store full category array as JSON
             plaid_category_id=txn_data.get("category_id"),
-            subcategory=sub_cat[:100] if sub_cat else None,  # Store subcategory
+            subcategory=sub_cat[:100] if sub_cat and isinstance(sub_cat, str) else sub_cat,  # Safe slicing
             pending=txn_data.get("pending", False),
             pending_transaction_id=txn_data.get("pending_transaction_id"),
             payment_channel=txn_data.get("payment_channel"),
@@ -856,7 +1102,10 @@ async def process_added_transaction(
         return True
 
     except Exception as e:
+        import traceback
         logger.error(f"Failed to process added transaction {txn_data.get('transaction_id', 'unknown')}: {e}")
+        logger.error(f"Transaction data: {txn_data}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         return False
 
 
@@ -881,16 +1130,16 @@ async def process_modified_transaction(
 
         # Update transaction fields
         # Extract category information
-        categories = txn_data.get("category", [])
-        sub_cat = categories[-1] if len(categories) > 1 else None
+        categories = txn_data.get("category") or []  # Ensure it's always a list, not None
+        sub_cat = categories[-1] if categories and len(categories) > 1 else None
 
         transaction.amount = Decimal(str(txn_data["amount"]))  # Use amount column directly
         transaction.date = parse_transaction_date(txn_data["date"])
-        transaction.name = txn_data["name"][:500]
-        transaction.merchant_name = txn_data.get("merchant_name", "")[:255] if txn_data.get("merchant_name") else None
+        transaction.name = txn_data["name"][:500] if txn_data.get("name") else "Unknown Transaction"
+        transaction.merchant_name = txn_data.get("merchant_name")[:255] if txn_data.get("merchant_name") else None
         transaction.plaid_category = categories  # Store full category array as JSON
         transaction.plaid_category_id = txn_data.get("category_id")
-        transaction.subcategory = sub_cat[:100] if sub_cat else None  # Store subcategory
+        transaction.subcategory = sub_cat[:100] if sub_cat and isinstance(sub_cat, str) else sub_cat  # Safe slicing
         transaction.pending = txn_data.get("pending", False)
         transaction.location = txn_data.get("location")
 

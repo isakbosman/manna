@@ -37,17 +37,21 @@ interface AccountCardProps {
   institution?: Institution
   onRemove: (accountId: string) => void
   onSync: (accountId: string) => void
+  onFetchHistorical: (accountId: string) => void
   isRemoving: boolean
   isSyncing: boolean
+  isFetchingHistorical: boolean
 }
 
-function AccountCard({ 
-  account, 
-  institution, 
-  onRemove, 
-  onSync, 
-  isRemoving, 
-  isSyncing 
+function AccountCard({
+  account,
+  institution,
+  onRemove,
+  onSync,
+  onFetchHistorical,
+  isRemoving,
+  isSyncing,
+  isFetchingHistorical
 }: AccountCardProps) {
   const [balanceVisible, setBalanceVisible] = useState(true)
   
@@ -96,6 +100,7 @@ function AccountCard({
               variant="ghost"
               size="sm"
               onClick={() => setBalanceVisible(!balanceVisible)}
+              title="Toggle balance visibility"
             >
               {balanceVisible ? (
                 <Eye className="w-4 h-4" />
@@ -108,6 +113,7 @@ function AccountCard({
               size="sm"
               onClick={() => onSync(account.id)}
               disabled={isSyncing}
+              title="Sync recent transactions"
             >
               {isSyncing ? (
                 <Loading size="sm" />
@@ -118,8 +124,22 @@ function AccountCard({
             <Button
               variant="ghost"
               size="sm"
+              onClick={() => onFetchHistorical(account.id)}
+              disabled={isFetchingHistorical}
+              title="Fetch all historical transactions"
+            >
+              {isFetchingHistorical ? (
+                <Loading size="sm" />
+              ) : (
+                <RefreshCcw className="w-4 h-4 text-primary-600" />
+              )}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => onRemove(account.id)}
               disabled={isRemoving}
+              title="Remove account"
             >
               {isRemoving ? (
                 <Loading size="sm" />
@@ -191,6 +211,7 @@ function AccountCard({
 function AccountsPage() {
   const [showAddAccount, setShowAddAccount] = useState(false)
   const [syncingAccounts, setSyncingAccounts] = useState<Set<string>>(new Set())
+  const [fetchingHistoricalAccounts, setFetchingHistoricalAccounts] = useState<Set<string>>(new Set())
   const [removingAccounts, setRemovingAccounts] = useState<Set<string>>(new Set())
   const queryClient = useQueryClient()
 
@@ -233,6 +254,15 @@ function AccountsPage() {
   // Sync transactions mutation
   const syncMutation = useMutation({
     mutationFn: accountsApi.syncTransactions,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['accounts'] })
+      queryClient.invalidateQueries({ queryKey: ['transactions'] })
+    }
+  })
+
+  // Fetch historical transactions mutation
+  const fetchHistoricalMutation = useMutation({
+    mutationFn: accountsApi.fetchHistoricalTransactions,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['accounts'] })
       queryClient.invalidateQueries({ queryKey: ['transactions'] })
@@ -305,6 +335,27 @@ function AccountsPage() {
     }
   }
 
+  const handleFetchHistorical = async (accountId: string) => {
+    setFetchingHistoricalAccounts(prev => new Set(prev).add(accountId))
+
+    try {
+      const result = await fetchHistoricalMutation.mutateAsync([accountId])
+      successToast(
+        'Historical Transactions Fetched',
+        `Fetched ${result.total_fetched} transactions (${result.new_transactions} new) for ${result.date_range}`
+      )
+    } catch (error: any) {
+      console.error('Fetch historical error:', error)
+      errorToast('Fetch Failed', error.message || 'Failed to fetch historical transactions')
+    } finally {
+      setFetchingHistoricalAccounts(prev => {
+        const next = new Set(prev)
+        next.delete(accountId)
+        return next
+      })
+    }
+  }
+
   const handleSyncAllAccounts = async () => {
     try {
       const result = await syncMutation.mutateAsync(undefined)
@@ -315,6 +366,19 @@ function AccountsPage() {
     } catch (error: any) {
       console.error('Sync all error:', error)
       errorToast('Sync Failed', error.message || 'Failed to sync accounts')
+    }
+  }
+
+  const handleFetchAllHistorical = async () => {
+    try {
+      const result = await fetchHistoricalMutation.mutateAsync(undefined)
+      successToast(
+        'Historical Transactions Fetched',
+        `Fetched ${result.total_fetched} transactions (${result.new_transactions} new) for ${result.date_range}`
+      )
+    } catch (error: any) {
+      console.error('Fetch all historical error:', error)
+      errorToast('Fetch Historical Failed', error.message || 'Failed to fetch historical transactions')
     }
   }
 
@@ -377,15 +441,33 @@ function AccountsPage() {
 
       {/* Action Buttons */}
       <div className="flex gap-4 mb-6">
-        <Button 
+        <Button
           onClick={() => setShowAddAccount(true)}
           disabled={showAddAccount}
         >
           <Plus className="w-4 h-4 mr-2" />
           Add Account
         </Button>
-        
-        <Button 
+
+        <Button
+          variant="outline"
+          onClick={handleFetchAllHistorical}
+          disabled={fetchHistoricalMutation.isPending}
+        >
+          {fetchHistoricalMutation.isPending ? (
+            <>
+              <Loading size="sm" className="mr-2" />
+              Fetching Historical...
+            </>
+          ) : (
+            <>
+              <RefreshCcw className="w-4 h-4 mr-2" />
+              Fetch All Historical
+            </>
+          )}
+        </Button>
+
+        <Button
           variant="outline" 
           onClick={handleSyncAllAccounts}
           disabled={syncMutation.isPending}
@@ -497,8 +579,10 @@ function AccountsPage() {
               institution={institutionMap.get(account.institution_id || '')}
               onRemove={handleRemoveAccount}
               onSync={handleSyncAccount}
+              onFetchHistorical={handleFetchHistorical}
               isRemoving={removingAccounts.has(account.id)}
               isSyncing={syncingAccounts.has(account.id)}
+              isFetchingHistorical={fetchingHistoricalAccounts.has(account.id)}
             />
           ))}
         </div>

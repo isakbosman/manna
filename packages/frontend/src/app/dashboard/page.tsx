@@ -91,6 +91,13 @@ function EmptyState({
 }
 
 function DashboardPage() {
+  // State for date range selector - moved to top so it can be used by hooks
+  const [selectedDateRange, setSelectedDateRange] = useState<DateRange>({
+    start: subDays(new Date(), 29),
+    end: new Date(),
+    label: 'Last 30 days'
+  })
+
   const {
     accounts,
     totalBalance,
@@ -100,21 +107,14 @@ function DashboardPage() {
     refetch: refetchAccounts
   } = useAccounts()
 
-  // Fetch dashboard data from API
-  const { data: financialSummary, isLoading: summaryLoading, error: summaryError } = useFinancialSummary()
-  const { data: recentTransactions = [], isLoading: transactionsLoading } = useRecentTransactions(10)
-  const { data: spendingData = [], isLoading: spendingLoading } = useSpendingByCategory(30)
-  const { data: trendsData = [], isLoading: trendsLoading } = useTransactionTrends(30)
-  const { data: cashFlowData = [], isLoading: cashFlowLoading } = useCashFlow(6)
+  // Fetch dashboard data from API with date range
+  const { data: financialSummary, isLoading: summaryLoading, error: summaryError } = useFinancialSummary(selectedDateRange.start, selectedDateRange.end)
+  const { data: recentTransactions = [], isLoading: transactionsLoading } = useRecentTransactions(10, selectedDateRange.start, selectedDateRange.end)
+  const { data: spendingData = [], isLoading: spendingLoading } = useSpendingByCategory(selectedDateRange.start, selectedDateRange.end)
+  const { data: trendsData = [], isLoading: trendsLoading } = useTransactionTrends(selectedDateRange.start, selectedDateRange.end)
+  const { data: cashFlowData = [], isLoading: cashFlowLoading } = useCashFlow(selectedDateRange.start, selectedDateRange.end)
   const { data: alerts = [], isLoading: alertsLoading } = useAlerts()
-  const { data: kpis, isLoading: kpisLoading } = useKPIs()
-
-  // State for date range selector
-  const [selectedDateRange, setSelectedDateRange] = useState<DateRange>({
-    start: subDays(new Date(), 29),
-    end: new Date(),
-    label: 'Last 30 days'
-  })
+  const { data: kpis, isLoading: kpisLoading } = useKPIs(selectedDateRange.start, selectedDateRange.end)
 
   const [isRefreshing, setIsRefreshing] = useState(false)
 

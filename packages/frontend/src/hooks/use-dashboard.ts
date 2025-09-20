@@ -77,11 +77,14 @@ export interface KPIs {
 }
 
 // Fetch financial summary
-export function useFinancialSummary() {
+export function useFinancialSummary(startDate?: Date, endDate?: Date) {
   return useQuery({
-    queryKey: ['dashboard', 'summary'],
+    queryKey: ['dashboard', 'summary', startDate?.toISOString(), endDate?.toISOString()],
     queryFn: async (): Promise<FinancialSummary> => {
-      const response = await api.get('/dashboard/summary')
+      const params: any = {}
+      if (startDate) params.start_date = startDate.toISOString()
+      if (endDate) params.end_date = endDate.toISOString()
+      const response = await api.get('/dashboard/summary', params)
       return response.data
     },
     staleTime: 1000 * 60 * 5, // 5 minutes
@@ -89,11 +92,14 @@ export function useFinancialSummary() {
 }
 
 // Fetch recent transactions
-export function useRecentTransactions(limit: number = 10) {
+export function useRecentTransactions(limit: number = 10, startDate?: Date, endDate?: Date) {
   return useQuery({
-    queryKey: ['dashboard', 'transactions', limit],
+    queryKey: ['dashboard', 'transactions', limit, startDate?.toISOString(), endDate?.toISOString()],
     queryFn: async (): Promise<Transaction[]> => {
-      const response = await api.get('/dashboard/transactions/recent', { limit })
+      const params: any = { limit }
+      if (startDate) params.start_date = startDate.toISOString()
+      if (endDate) params.end_date = endDate.toISOString()
+      const response = await api.get('/dashboard/transactions/recent', params)
       return response.data || []
     },
     staleTime: 1000 * 60 * 2, // 2 minutes
@@ -101,11 +107,14 @@ export function useRecentTransactions(limit: number = 10) {
 }
 
 // Fetch spending by category
-export function useSpendingByCategory(days: number = 30) {
+export function useSpendingByCategory(startDate?: Date, endDate?: Date) {
   return useQuery({
-    queryKey: ['dashboard', 'spending', days],
+    queryKey: ['dashboard', 'spending', startDate?.toISOString(), endDate?.toISOString()],
     queryFn: async (): Promise<SpendingCategory[]> => {
-      const response = await api.get('/dashboard/spending/by-category', { days })
+      const params: any = {}
+      if (startDate) params.start_date = startDate.toISOString()
+      if (endDate) params.end_date = endDate.toISOString()
+      const response = await api.get('/dashboard/spending/by-category', params)
       return response.data || []
     },
     staleTime: 1000 * 60 * 5, // 5 minutes
@@ -113,11 +122,14 @@ export function useSpendingByCategory(days: number = 30) {
 }
 
 // Fetch transaction trends
-export function useTransactionTrends(days: number = 30) {
+export function useTransactionTrends(startDate?: Date, endDate?: Date) {
   return useQuery({
-    queryKey: ['dashboard', 'trends', days],
+    queryKey: ['dashboard', 'trends', startDate?.toISOString(), endDate?.toISOString()],
     queryFn: async (): Promise<TrendData[]> => {
-      const response = await api.get('/dashboard/trends', { days })
+      const params: any = {}
+      if (startDate) params.start_date = startDate.toISOString()
+      if (endDate) params.end_date = endDate.toISOString()
+      const response = await api.get('/dashboard/trends', params)
       return response.data || []
     },
     staleTime: 1000 * 60 * 5, // 5 minutes
@@ -125,11 +137,14 @@ export function useTransactionTrends(days: number = 30) {
 }
 
 // Fetch cash flow data
-export function useCashFlow(months: number = 6) {
+export function useCashFlow(startDate?: Date, endDate?: Date) {
   return useQuery({
-    queryKey: ['dashboard', 'cashflow', months],
+    queryKey: ['dashboard', 'cashflow', startDate?.toISOString(), endDate?.toISOString()],
     queryFn: async (): Promise<CashFlowData[]> => {
-      const response = await api.get('/dashboard/cash-flow', { months })
+      const params: any = {}
+      if (startDate) params.start_date = startDate.toISOString()
+      if (endDate) params.end_date = endDate.toISOString()
+      const response = await api.get('/dashboard/cash-flow', params)
       return response.data || []
     },
     staleTime: 1000 * 60 * 5, // 5 minutes
@@ -149,11 +164,14 @@ export function useAlerts() {
 }
 
 // Fetch KPIs
-export function useKPIs() {
+export function useKPIs(startDate?: Date, endDate?: Date) {
   return useQuery({
-    queryKey: ['dashboard', 'kpis'],
+    queryKey: ['dashboard', 'kpis', startDate?.toISOString(), endDate?.toISOString()],
     queryFn: async (): Promise<KPIs> => {
-      const response = await api.get('/dashboard/kpis')
+      const params: any = {}
+      if (startDate) params.start_date = startDate.toISOString()
+      if (endDate) params.end_date = endDate.toISOString()
+      const response = await api.get('/dashboard/kpis', params)
       return response.data
     },
     staleTime: 1000 * 60 * 2, // 2 minutes

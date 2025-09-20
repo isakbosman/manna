@@ -5,6 +5,7 @@ Plaid API integration service for financial data access.
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 import logging
+import json
 from plaid import ApiClient, Configuration
 from plaid.api import plaid_api
 from plaid.model.link_token_create_request import LinkTokenCreateRequest
@@ -64,8 +65,10 @@ class PlaidService:
                 # Skip 'accounts' as it's not a valid Plaid product
                 # Account data is automatically included with other products
                 continue
-            elif product == "identity":
-                self.products.append(Products('identity'))
+            elif product == "balance":
+                self.products.append(Products('balance'))
+            elif product == "assets":
+                self.products.append(Products('assets'))
             elif product == "investments":
                 self.products.append(Products('investments'))
             elif product == "liabilities":
@@ -111,6 +114,15 @@ class PlaidService:
             # Add access token for update mode
             if access_token:
                 request_params["access_token"] = access_token
+            else:
+                # For new connections, request maximum transaction history (2 years)
+                # This only applies when initially linking an account
+                if Products('transactions') in self.products:
+                    days_requested = getattr(settings, 'plaid_days_requested', 730)  # Default to 2 years
+                    request_params["transactions"] = {
+                        "days_requested": days_requested
+                    }
+                    logger.info(f"Requesting {days_requested} days of transaction history for new account link")
 
             request = LinkTokenCreateRequest(**request_params)
             
@@ -550,6 +562,109 @@ class PlaidService:
         else:
             raise Exception(f"Failed to sync transactions after {max_retries + 1} attempts: Unknown error")
     
+    async def get_transactions_with_dates(
+        self,
+        access_token: str,
+        start_date: str,
+        end_date: str,
+        account_ids: Optional[List[str]] = None,
+        offset: int = 0,
+        count: int = 500
+    ) -> Dict[str, Any]:
+        """
+        Fetch transactions within a specific date range using Plaid's transactions/get endpoint.
+        This endpoint allows fetching historical transactions beyond the 6-month sync limit.
+
+        Args:
+            access_token: Plaid access token
+            start_date: Start date in YYYY-MM-DD format (string)
+            end_date: End date in YYYY-MM-DD format (string)
+            account_ids: Optional list of account IDs to filter transactions
+            offset: Number of transactions to skip
+            count: Number of transactions to fetch (max 500)
+
+        Returns:
+            Dict containing transactions and total count
+        """
+        try:
+            from datetime import datetime
+            from plaid.model.transactions_get_request_options import TransactionsGetRequestOptions
+
+            # Convert string dates to date objects for Plaid API
+            start_date_obj = datetime.strptime(start_date, "%Y-%m-%d").date()
+            end_date_obj = datetime.strptime(end_date, "%Y-%m-%d").date()
+
+            # Create options object for optional parameters
+            options = TransactionsGetRequestOptions(
+                account_ids=account_ids if account_ids else None,
+                count=min(count, 500),
+                offset=offset
+            )
+
+            # Create the request with required parameters and options
+            request = TransactionsGetRequest(
+                access_token=access_token,
+                start_date=start_date_obj,
+                end_date=end_date_obj,
+                options=options
+            )
+
+            response = self.client.transactions_get(request)
+
+            # Convert response to dict
+            transactions = []
+            for txn in response.get('transactions', []):
+                # Convert Plaid transaction object to dictionary
+                txn_dict = {
+                    'account_id': txn.account_id,
+                    'amount': txn.amount,
+                    'iso_currency_code': txn.iso_currency_code,
+                    'unofficial_currency_code': txn.unofficial_currency_code,
+                    'category': txn.category,
+                    'category_id': txn.category_id,
+                    'check_number': getattr(txn, 'check_number', None),
+                    'date': txn.date,
+                    'datetime': getattr(txn, 'datetime', None),
+                    'authorized_date': txn.authorized_date,
+                    'authorized_datetime': getattr(txn, 'authorized_datetime', None),
+                    'location': txn.location.to_dict() if txn.location else None,
+                    'name': txn.name,
+                    'merchant_name': txn.merchant_name,
+                    'payment_meta': txn.payment_meta.to_dict() if txn.payment_meta else None,
+                    'payment_channel': txn.payment_channel,
+                    'pending': txn.pending,
+                    'pending_transaction_id': txn.pending_transaction_id,
+                    'account_owner': txn.account_owner,
+                    'transaction_id': txn.transaction_id,
+                    'transaction_code': getattr(txn, 'transaction_code', None),
+                    'transaction_type': getattr(txn, 'transaction_type', None),
+                    'website': getattr(txn, 'website', None),
+                    'logo_url': getattr(txn, 'logo_url', None),
+                    'personal_finance_category': getattr(txn, 'personal_finance_category', None),
+                    'counterparties': getattr(txn, 'counterparties', None),
+                    'merchant_entity_id': getattr(txn, 'merchant_entity_id', None)
+                }
+                transactions.append(txn_dict)
+
+            logger.info(
+                f"Fetched {len(transactions)} transactions from {start_date} to {end_date} "
+                f"(offset: {offset}, total: {response.get('total_transactions', 0)})"
+            )
+
+            return {
+                "transactions": transactions,
+                "total_transactions": response.get('total_transactions', 0),
+                "has_more": response.get('total_transactions', 0) > (offset + len(transactions))
+            }
+
+        except ApiException as e:
+            logger.error(f"Plaid API error fetching historical transactions: {e}")
+            error_response = json.loads(e.body) if hasattr(e, 'body') else {}
+            raise Exception(f"Failed to fetch historical transactions: {error_response.get('error_message', str(e))}")
+        except Exception as e:
+            logger.error(f"Error fetching historical transactions: {e}")
+            raise Exception(f"Failed to fetch historical transactions: {str(e)}")
+
     async def get_item(self, access_token: str) -> Dict[str, Any]:
         """
         Get information about a Plaid Item.

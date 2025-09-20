@@ -64,8 +64,12 @@ class Settings(BaseSettings):
     plaid_secret: Optional[str] = Field(default=None, env="PLAID_SECRET")
     plaid_environment: str = Field(default="sandbox", env="PLAID_ENVIRONMENT")
     plaid_products: List[str] = Field(
-        default=["transactions", "accounts", "identity"],
+        default=["transactions", "accounts"],
         env="PLAID_PRODUCTS"
+    )
+    plaid_days_requested: int = Field(
+        default=730,  # 2 years of transaction history
+        env="PLAID_DAYS_REQUESTED"
     )
     plaid_country_codes: List[str] = Field(
         default=["US"],
