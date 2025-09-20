@@ -42,11 +42,11 @@ services:
     environment:
       - ENVIRONMENT=development
       # Using local PostgreSQL: database=manna, user=postgres, no password
-      - DATABASE_URL=postgresql://postgres@host.docker.internal:5432/manna
+      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres@host.docker.internal:5432/manna}
       - REDIS_URL=redis://redis:6379/0
-      - PLAID_CLIENT_ID=677453d8ec5d8b0026b553fd
-      - PLAID_SECRET=8b2365aea187eff8e24746384a9ee8
-      - PLAID_ENVIRONMENT=sandbox
+      - PLAID_CLIENT_ID=${PLAID_CLIENT_ID}
+      - PLAID_SECRET=${PLAID_SECRET}
+      - PLAID_ENVIRONMENT=${PLAID_ENVIRONMENT}
     ports:
       - '8001:8000'
     volumes:
